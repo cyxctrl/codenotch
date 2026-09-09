@@ -48,10 +48,23 @@ DEV_TEAM := $(if $(DEV_IDENTITY),$(shell security find-certificate -c "$(DEV_IDE
 ifeq (,$(HAS_DEVELOPER_ID))
 ifeq (,$(DEV_TEAM))
 DEV_SIGN := CODE_SIGN_IDENTITY="-" DEVELOPMENT_TEAM="" CODE_SIGN_STYLE=Automatic
+# Xcode re-signs the prebuilt Sparkle framework with its own ad-hoc stamp, and
+# dyld rejects the mix at launch ("code signature in ... not valid for use in
+# process"): re-sign framework and app in one pass after every build. Empty
+# whenever a real identity signs, where Xcode's own re-signing is already
+# consistent.
+define DEV_RESIGN
+	@APP="$(XCODE_BUILD_DIR)/$(CONFIGURATION)/$(APP_NAME).app"; \
+	codesign --force --sign - $$APP/Contents/Frameworks/Sparkle.framework; \
+	codesign --force --sign - $$APP
+endef
 else
 DEV_SIGN := CODE_SIGN_IDENTITY="Apple Development" CODE_SIGN_STYLE=Manual \
 	DEVELOPMENT_TEAM="$(DEV_TEAM)" PROVISIONING_PROFILE_SPECIFIER=""
+DEV_RESIGN := @true
 endif
+else
+DEV_RESIGN := @true
 endif
 
 .PHONY: gen build test test-ci verify-deps run install clean
@@ -64,10 +77,18 @@ gen:
 build: gen
 	xcodebuild -project $(PROJECT) -scheme $(SCHEME) -destination '$(DEST)' \
 		-configuration Debug $(DEV_SIGN) build
+	$(DEV_RESIGN)
 
 test: gen
 	xcodebuild -project $(PROJECT) -scheme $(SCHEME) -destination '$(DEST)' \
-		-configuration Debug $(DEV_SIGN) test
+		-configuration Debug $(DEV_SIGN) build-for-testing
+	$(DEV_RESIGN)
+	# The test host launches the app, so the re-sign has to land before the
+	# tests run — test-without-building against the bundle just signed above.
+	# build-for-testing (not build) is what compiles the test bundle the
+	# second invocation injects into that host.
+	xcodebuild -project $(PROJECT) -scheme $(SCHEME) -destination '$(DEST)' \
+		-configuration Debug $(DEV_SIGN) test-without-building
 
 # Continuous integration: no Developer ID identity exists on a CI runner, and
 # unit tests need none — override the manual signing with plain unsigned
