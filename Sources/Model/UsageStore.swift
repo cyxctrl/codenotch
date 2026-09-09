@@ -215,16 +215,45 @@ final class UsageStore: ObservableObject {
     var providerSummaries: [ProviderSummary] {
         let models = localModelSummaries
         let summaries = orderedProviders.flatMap { provider in
+            // `account()` is read once per provider and shared: it can touch a
+            // credential store, and a build of the summaries must not read it
+            // twice (the settings row counts those reads).
+            let account = disconnected.contains(provider.id) ? nil : provider.account()
             let summary = ProviderSummary(kind: provider.kind, id: provider.id, name: provider.displayName,
-                            glyph: provider.glyph,
-                            account: disconnected.contains(provider.id) ? nil : provider.account(),
-                            signIn: provider.signInRoute,
-                            wasRefusedAccess: refusedAccess.contains(provider.id),
-                            needsSignInRenewal: needsRenewal.contains(provider.id))
+                                          glyph: provider.glyph,
+                                          account: account,
+                                          signIn: provider.signInRoute,
+                                          wasRefusedAccess: refusedAccess.contains(provider.id),
+                                          needsSignInRenewal: needsRenewal.contains(provider.id),
+                                          needsSignIn: needsSignIn(provider, account: account))
             return [summary] + models.filter { $0.sourceProviderID == provider.id }
         }
         return ProviderOrder.arrange(summaries, by: order, id: \.id)
     }
+
+    /// Whether this provider's row should offer its sign-in route right now.
+    ///
+    /// A provider that borrows a local credential is signed out whenever
+    /// `account()` finds none, so once it is connected and account-less it
+    /// always needs sign-in. A browser-session provider (`WebSessionProvider`,
+    /// route `.modal`) carries no account metadata — the session cookie is the
+    /// whole credential — so the only honest signal is the last fetch: sign-in
+    /// is wanted only when the server said so (`.needsAuth`), not while it is
+    /// reading fine.
+    private func needsSignIn(_ provider: UsageProvider, account: ProviderAccount?) -> Bool {
+        guard !disconnected.contains(provider.id), account == nil else { return false }
+        switch provider.signInRoute {
+        case .modal:
+            return snapshotStatus(provider.id) == .needsAuth
+        case .openApp, .guidance:
+            return true
+        }
+    }
+
+    private func snapshotStatus(_ providerID: String) -> ProviderStatus? {
+        snapshots.first { $0.id == providerID }?.status
+    }
+
 
     func start() {
         refreshNow()

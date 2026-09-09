@@ -876,8 +876,18 @@ struct SettingsView: View {
     /// state, and it is the only moment the sheet has something to explain.
     private var needsSetup: Bool {
         guard !connected.contains(where: { $0.localModel != nil }) else { return false }
-        let usageAccounts = accounts.filter { $0.kind == .usage }
-        return !usageAccounts.isEmpty && usageAccounts.allSatisfy { $0.account == nil }
+        return !accounts.isEmpty && !accounts.contains(where: isSetUp)
+    }
+
+    /// A provider counts as set up when it is switched on and can actually
+    /// read. It shows an account when it borrows a local credential; a
+    /// browser-session provider such as XyToken has no account metadata at
+    /// all, so it counts when it is reading fine through its own session —
+    /// the same fact the row's detail line uses (no sign-in pending). A
+    /// switched-off provider, or one waiting on a sign-in, does not count.
+    private func isSetUp(_ summary: ProviderSummary) -> Bool {
+        guard preferences.isConnected(summary.id) else { return false }
+        return summary.account != nil || !summary.needsSignIn
     }
 
     /// Names the tools rather than saying "tools already signed in on this
@@ -1425,6 +1435,18 @@ private struct AccountRow: View {
             Text(L10n.t("macOS is not letting Codenotch read \(provider.name)'s saved login. Choose Allow access… above, then Always Allow."))
                 .foregroundStyle(.orange)
                 .fixedSize(horizontal: false, vertical: true)
+        } else if !provider.needsSignIn {
+            // A browser-session provider (XyToken) reads fine with no account
+            // metadata to show — the session cookie is the credential, so there
+            // is no sign-in to offer. Say where the session lives instead, the
+            // same way an account row names where its account is signed in.
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Reads through \(provider.name)'s own browser session — signed in.")
+                    .foregroundStyle(.secondary)
+                Text(provider.signIn.switchHint)
+                    .foregroundStyle(.tertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         } else {
             HStack(spacing: 8) {
                 Text(provider.signIn.explanation)
