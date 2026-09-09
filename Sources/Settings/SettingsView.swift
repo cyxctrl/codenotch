@@ -10,13 +10,9 @@ import Combine
 extension View {
     @ViewBuilder
     func glassBackground(in shape: some Shape) -> some View {
-        if #available(macOS 26.0, *) {
-            background { Color.clear.glassEffect(.regular, in: shape) }
-        } else {
-            background {
-                shape.fill(.regularMaterial)
-            }
-        }
+        // Routed through the fork's compat shim so an old SDK never has to
+        // see the `glassEffect` symbol (same glass, same material fallback).
+        compatGlassEffect(in: shape)
     }
 }
 
