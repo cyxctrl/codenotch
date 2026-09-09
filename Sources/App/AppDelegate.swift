@@ -70,10 +70,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if ProcessInfo.processInfo.environment["CODENOTCH_DEMO"] == "1" {
             fleet.setSnapshots(Fixtures.snapshots())
         } else {
-            // Nothing needs a browser session at the moment. `WebSessionProvider`
-            // and `Sites.perplexity` are kept: they are the working pattern for a
-            // site behind bot management, and re-registering is one line.
-            let webProviders: [WebSessionProvider] = []
+            // XyToken needs a browser session: its refresh cookie is HttpOnly and
+            // rotates on every call, so the refresh+self sequence runs in the app's
+            // own WebView where the user signs in. `Sites.perplexity` stays on the
+            // bench — the working pattern for a site behind bot management — and
+            // re-registering it is one line.
+            let webProviders: [WebSessionProvider] = [
+                WebSessionProvider(site: Sites.xytoken),
+            ]
             fleet.signInItems = webProviders.map { provider in
                 (title: L10n.t("Sign in to \(provider.displayName)…"),
                  action: { [weak provider] in provider?.presentSignIn() })
