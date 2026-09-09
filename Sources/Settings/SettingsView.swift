@@ -1698,7 +1698,7 @@ private struct AccountRow: View {
                 // It must sit *over* the content — behind it, SwiftUI's own
                 // pointer regions win and the rect is never consulted at all —
                 // and it must not take hits, or it swallows the drag.
-                .pointerStyle(isOrderable ? .grabIdle : nil)
+                .compatPointerStyle(active: isOrderable)
                 .overlay {
                     if isOrderable {
                         GrabCursor(refreshToken: cursorRefresh)

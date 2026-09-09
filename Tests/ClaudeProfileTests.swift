@@ -5,6 +5,7 @@ import XCTest
 /// with its own token, its own limits and its own sessions. Reading only
 /// `~/.claude` showed one of them and was blind to the rest.
 final class ClaudeProfileTests: XCTestCase {
+
     private func home(_ layout: [String: [String]]) throws -> URL {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("ClaudeProfileTests.\(UUID().uuidString)")
