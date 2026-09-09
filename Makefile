@@ -54,7 +54,9 @@ DEV_SIGN := CODE_SIGN_IDENTITY="-" DEVELOPMENT_TEAM="" CODE_SIGN_STYLE=Automatic
 # whenever a real identity signs, where Xcode's own re-signing is already
 # consistent.
 define DEV_RESIGN
-	@APP="$(XCODE_BUILD_DIR)/$(CONFIGURATION)/$(APP_NAME).app"; \
+	@APP=$$(xcodebuild -project $(PROJECT) -scheme $(SCHEME) -destination '$(DEST)' \
+		-configuration Debug -showBuildSettings 2>/dev/null \
+		| awk -F' = ' '/ BUILT_PRODUCTS_DIR/ {print $$2; exit}')/$(APP_NAME).app; \
 	codesign --force --sign - $$APP/Contents/Frameworks/Sparkle.framework; \
 	codesign --force --sign - $$APP
 endef
