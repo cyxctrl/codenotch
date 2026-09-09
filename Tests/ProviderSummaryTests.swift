@@ -86,9 +86,41 @@ final class ProviderSummaryTests: XCTestCase {
                        "a remedy was offered before anything had failed")
     }
 
+    /// A browser-session provider (XyToken) has no account metadata, so the
+    /// settings row must not offer sign-in while it is reading fine — the
+    /// bug where a healthy session still nagged to sign in.
+    func testModalProviderReadingFineDoesNotNeedSignIn() async {
+        let provider = WebSessionStub(outcome: .success)
+        let store = makeStore(provider)
+        await store.refresh()
+        XCTAssertEqual(store.providerSummaries.first?.needsSignIn, false,
+                       "a signed-in browser session was offered sign-in")
+    }
+
+    /// ...and the prompt comes back the moment the session is told to re-auth
+    /// (the server answered 401), matching the ring's needsAuth state.
+    func testModalProviderNeedsAuthOffersSignIn() async {
+        let provider = WebSessionStub(outcome: .failure(.needsAuth))
+        let store = makeStore(provider)
+        await store.refresh()
+        XCTAssertEqual(store.providerSummaries.first?.needsSignIn, true,
+                       "an unauthenticated browser session hid its sign-in prompt")
+    }
+
+    /// A provider that borrows a local credential keeps needing sign-in the
+    /// moment it is account-less, even if a reading is on hand — the web-session
+    /// special case must not soften the borrowed-credential path.
+    func testBorrowedCredentialStillNeedsSignInWhenAccountless() async {
+        let provider = SwitchableProvider(outcome: .success)
+        let store = makeStore(provider)
+        await store.refresh()
+        XCTAssertEqual(store.providerSummaries.first?.needsSignIn, true,
+                       "an account-less borrowed-credential provider hid its sign-in prompt")
+    }
+
     // MARK: - Helpers
 
-    private func makeStore(_ provider: SwitchableProvider) -> UsageStore {
+    private func makeStore(_ provider: UsageProvider) -> UsageStore {
         let name = "ProviderSummaryTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: name)!
         defaults.removePersistentDomain(forName: name)
@@ -127,6 +159,42 @@ private final class SwitchableProvider: UsageProvider, @unchecked Sendable {
     }
     func account() -> ProviderAccount? { nil }
     nonisolated var signInRoute: SignInRoute { .guidance("—") }
+    func signOut() async {}
+    func presentSignIn() {}
+    nonisolated func forgetCachedCredential() {}
+}
+
+/// A browser-session provider: no account metadata ever, sign-in is its own
+/// modal, and whether sign-in is wanted is decided by the fetch outcome.
+private final class WebSessionStub: UsageProvider, @unchecked Sendable {
+    enum Outcome {
+        case success
+        case failure(UsageProviderError)
+    }
+
+    let id = "xytoken"
+    let displayName = "XyToken"
+    let glyph = ProviderGlyph.third
+    var outcome: Outcome
+
+    init(outcome: Outcome) { self.outcome = outcome }
+
+    func fetchSnapshot() async throws -> ProviderSnapshot {
+        switch outcome {
+        case .failure(let error):
+            throw error
+        case .success:
+            return ProviderSnapshot(
+                id: id, displayName: displayName, glyph: glyph,
+                fidelity: .official, status: .ok,
+                windows: [LimitWindow(id: "daily", label: "Daily",
+                                      usedFraction: 0.3,
+                                      resetsAt: Date().addingTimeInterval(3600))]
+            )
+        }
+    }
+    func account() -> ProviderAccount? { nil }
+    nonisolated var signInRoute: SignInRoute { .modal(name: "XyToken") }
     func signOut() async {}
     func presentSignIn() {}
     nonisolated func forgetCachedCredential() {}
