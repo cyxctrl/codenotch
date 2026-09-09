@@ -548,6 +548,33 @@ enum GlyphOutline {
          CGPoint(x: 0.58, y: 0.78), CGPoint(x: 0.42, y: 0.78)]
     ]
 
+    /// Kimi Code's own icon, flattened from the SVG in its VS Code extension
+    /// bundle (`resources/kimi-icon.svg`), the way `cursor` is. The stroked
+    /// rounded body becomes two even-odd loops — outer and inner — and the
+    /// two eye marks are filled. The 24-box icon is wider than it is tall, so
+    /// it is scaled about the box centre to match the other marks' weight.
+    static let kimi: [[CGPoint]] = [
+        [CGPoint(x: 0.0402, y: 0.2513), CGPoint(x: 0.0509, y: 0.1975), CGPoint(x: 0.0814, y: 0.1518), CGPoint(x: 0.1271, y: 0.1213),
+         CGPoint(x: 0.1810, y: 0.1106), CGPoint(x: 0.8190, y: 0.1106), CGPoint(x: 0.8729, y: 0.1213), CGPoint(x: 0.9186, y: 0.1518),
+         CGPoint(x: 0.9491, y: 0.1975), CGPoint(x: 0.9598, y: 0.2513), CGPoint(x: 0.9598, y: 0.6548), CGPoint(x: 0.9491, y: 0.7087),
+         CGPoint(x: 0.9186, y: 0.7544), CGPoint(x: 0.8729, y: 0.7849), CGPoint(x: 0.8190, y: 0.7956), CGPoint(x: 0.1810, y: 0.7956),
+         CGPoint(x: 0.1271, y: 0.7849), CGPoint(x: 0.0814, y: 0.7544), CGPoint(x: 0.0509, y: 0.7087), CGPoint(x: 0.0402, y: 0.6548)],
+        [CGPoint(x: 0.1153, y: 0.2513), CGPoint(x: 0.1203, y: 0.2262), CGPoint(x: 0.1345, y: 0.2049), CGPoint(x: 0.1558, y: 0.1907),
+         CGPoint(x: 0.1810, y: 0.1857), CGPoint(x: 0.8190, y: 0.1857), CGPoint(x: 0.8442, y: 0.1907), CGPoint(x: 0.8655, y: 0.2049),
+         CGPoint(x: 0.8797, y: 0.2262), CGPoint(x: 0.8847, y: 0.2513), CGPoint(x: 0.8847, y: 0.6548), CGPoint(x: 0.8797, y: 0.6800),
+         CGPoint(x: 0.8655, y: 0.7013), CGPoint(x: 0.8442, y: 0.7155), CGPoint(x: 0.8190, y: 0.7205), CGPoint(x: 0.1810, y: 0.7205),
+         CGPoint(x: 0.1558, y: 0.7155), CGPoint(x: 0.1345, y: 0.7013), CGPoint(x: 0.1203, y: 0.6800), CGPoint(x: 0.1153, y: 0.6548)],
+        [CGPoint(x: 0.3874, y: 0.3334), CGPoint(x: 0.3890, y: 0.3254), CGPoint(x: 0.3936, y: 0.3185), CGPoint(x: 0.4004, y: 0.3139),
+         CGPoint(x: 0.4085, y: 0.3123), CGPoint(x: 0.4320, y: 0.3123), CGPoint(x: 0.4401, y: 0.3139), CGPoint(x: 0.4469, y: 0.3185),
+         CGPoint(x: 0.4515, y: 0.3254), CGPoint(x: 0.4531, y: 0.3334), CGPoint(x: 0.4531, y: 0.4132), CGPoint(x: 0.4515, y: 0.4213),
+         CGPoint(x: 0.4469, y: 0.4281), CGPoint(x: 0.4401, y: 0.4327), CGPoint(x: 0.4320, y: 0.4343), CGPoint(x: 0.4085, y: 0.4343),
+         CGPoint(x: 0.4004, y: 0.4327), CGPoint(x: 0.3936, y: 0.4281), CGPoint(x: 0.3890, y: 0.4213), CGPoint(x: 0.3874, y: 0.4132)],
+        [CGPoint(x: 0.6689, y: 0.3334), CGPoint(x: 0.6705, y: 0.3254), CGPoint(x: 0.6751, y: 0.3185), CGPoint(x: 0.6819, y: 0.3139),
+         CGPoint(x: 0.6900, y: 0.3123), CGPoint(x: 0.7135, y: 0.3123), CGPoint(x: 0.7216, y: 0.3139), CGPoint(x: 0.7284, y: 0.3185),
+         CGPoint(x: 0.7330, y: 0.3254), CGPoint(x: 0.7346, y: 0.3334), CGPoint(x: 0.7346, y: 0.4132), CGPoint(x: 0.7330, y: 0.4213),
+         CGPoint(x: 0.7284, y: 0.4281), CGPoint(x: 0.7216, y: 0.4327), CGPoint(x: 0.7135, y: 0.4343), CGPoint(x: 0.6900, y: 0.4343),
+         CGPoint(x: 0.6819, y: 0.4327), CGPoint(x: 0.6751, y: 0.4281), CGPoint(x: 0.6705, y: 0.4213), CGPoint(x: 0.6689, y: 0.4132)]
+    ]
     /// GitHub Copilot's own mark, traced from its icon.
     static let copilot: [[CGPoint]] = [
         [

@@ -286,6 +286,7 @@ struct ProviderSnapshot: Identifiable, Equatable {
         // one wants a key, the local one wants the daemon running.
         case "ollama":       return L10n.t("Enter an Ollama API key in Settings, or export OLLAMA_API_KEY", locale: locale)
         case "ollama-local": return L10n.t("Start Ollama to monitor your local models", locale: locale)
+        case "kimi":         return L10n.t("Sign in to the Kimi Code CLI (run `kimi`) to read your usage", locale: locale)
         default:           return L10n.t("Sign in to \(displayName) to read your usage", locale: locale)
         }
     }
