@@ -122,8 +122,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // Settings changes it, because the fetch URLs live on the site.
             let miniMaxWeb = WebSessionProvider(site: Sites.minimax(region: preferences.minimaxRegion))
             self.miniMaxWeb = miniMaxWeb
-            let webProviders: [WebSessionProvider] = [deepSeek, qianwen]
-            fleet.signInItems = [deepSeek, miniMaxWeb, qianwen].map { provider in
+            // XyToken needs a browser session too: its refresh cookie is HttpOnly and
+            // rotates on every call, so the refresh+self sequence runs in the app's
+            // own WebView where the user signs in. It joins `webProviders`, so it gets
+            // a ring of its own; MiniMax stays out of that list for the reason above.
+            let xytoken = WebSessionProvider(site: Sites.xytoken)
+            let webProviders: [WebSessionProvider] = [deepSeek, qianwen, xytoken]
+            fleet.signInItems = [deepSeek, miniMaxWeb, qianwen, xytoken].map { provider in
                 let name = provider.displayName
                 return (title: L10n.t("Sign in to \(name)…"),
                         action: { [weak provider] in provider?.presentSignIn() })
