@@ -87,13 +87,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // very first list it draws already excludes them. Constructed first,
             // it drew every provider from the archive and only dropped the
             // switched-off ones once the binding below delivered.
+            // This fork does not register ClaudeOAuthProvider: reading the
+            // "Claude Code-credentials" keychain item makes macOS raise an access
+            // prompt on every launch of an ad-hoc build — each rebuild changes the
+            // cdhash, so the grant cannot stick. To bring the Claude ring back,
+            // prefix the list below with
+            // `claudeProfiles.map { ClaudeOAuthProvider(profile: $0) }`.
             Log.usage.info("claude profiles: \(self.claudeProfiles.map(\.displayPath).joined(separator: ", "), privacy: .public)")
             Log.usage.info("codex profiles: \(self.codexProfiles.map(\.displayPath).joined(separator: ", "), privacy: .public)")
             let claudeProviders = claudeProfiles.map { ClaudeOAuthProvider(profile: $0) }
             self.claudeProviders = claudeProviders
             let store = UsageStore(
-                providers: claudeProviders
-                    + [CursorLocalProvider()]
+                providers: [CursorLocalProvider()]
                     + codexProfiles.map { CodexLocalProvider(profile: $0) }
                     + [AntigravityProvider(),
                        GLMProvider(), GrokLocalProvider(), OpenCodeProvider(),
