@@ -149,4 +149,13 @@ struct ProviderSummary: Identifiable, Equatable {
     /// place and looking fine. Tying the warning to "is there a reading" would
     /// hide it behind exactly the stale number it is warning about.
     var needsSignInRenewal: Bool = false
+    /// Whether the row should be offering this provider's sign-in route.
+    ///
+    /// Most providers borrow a local credential, so "no account metadata"
+    /// means "signed out" and the row offers sign-in the moment the provider
+    /// is account-less. A `WebSessionProvider` is the exception: its session
+    /// cookie *is* the credential, so there is never account metadata to
+    /// show and this is derived from the store's last fetch instead — a live
+    /// reading means no sign-in, `.needsAuth` means there is one.
+    var needsSignIn: Bool = true
 }
