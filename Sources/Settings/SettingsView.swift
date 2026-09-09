@@ -367,16 +367,10 @@ struct SettingsView: View {
                                          style: .continuous)
                             .strokeBorder(Color(nsColor: .separatorColor), lineWidth: 1)
                     )
-            } else if #available(macOS 26.0, *) {
-                Color.clear.glassEffect(
-                    .regular,
-                    in: RoundedRectangle(cornerRadius: SettingsView.sidebarCornerRadius,
-                                         style: .continuous)
-                )
             } else {
-                RoundedRectangle(cornerRadius: SettingsView.sidebarCornerRadius,
-                                 style: .continuous)
-                    .fill(.regularMaterial)
+                Color.clear
+                    .compatGlassEffect(in: RoundedRectangle(cornerRadius: SettingsView.sidebarCornerRadius,
+                                                            style: .continuous))
             }
         }
         .padding(SettingsView.sidebarInset)
@@ -413,10 +407,9 @@ struct SettingsView: View {
                         Circle()
                             .fill(Color(nsColor: .controlBackgroundColor))
                             .overlay(Circle().strokeBorder(Color(nsColor: .separatorColor), lineWidth: 1))
-                    } else if #available(macOS 26.0, *) {
-                        Color.clear.glassEffect(.regular, in: Circle())
                     } else {
-                        Circle().fill(.regularMaterial)
+                        Color.clear
+                            .compatGlassEffect(in: Circle())
                     }
                 }
                 .contentShape(Circle())
@@ -1410,7 +1403,7 @@ private struct AccountRow: View {
                 // It must sit *over* the content — behind it, SwiftUI's own
                 // pointer regions win and the rect is never consulted at all —
                 // and it must not take hits, or it swallows the drag.
-                .pointerStyle(isOrderable ? .grabIdle : nil)
+                .compatPointerStyle(active: isOrderable)
                 .overlay {
                     if isOrderable {
                         GrabCursor(refreshToken: cursorRefresh)
