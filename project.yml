@@ -42,7 +42,7 @@ settings:
 packages:
   SwiftNIO:
     url: https://github.com/apple/swift-nio
-    from: "2.102.0"
+    from: "2.86.0"
   Sparkle:
     url: https://github.com/sparkle-project/Sparkle
     from: "2.6.0"
