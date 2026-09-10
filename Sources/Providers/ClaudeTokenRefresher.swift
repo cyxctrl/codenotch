@@ -208,7 +208,7 @@ final class ClaudeTokenRefresher: ObservableObject {
     /// end-of-input, so it starts up, renews, and refuses for want of a prompt.
     /// Output goes nowhere — there is nothing in it worth keeping, and a token
     /// could in principle be echoed into it.
-    static func run(_ cli: URL, timeout: TimeInterval) throws
+    nonisolated static func run(_ cli: URL, timeout: TimeInterval) throws
         -> (pid: Int32, exit: () async -> Int32?) {
         let process = Process()
         process.executableURL = cli
