@@ -96,9 +96,10 @@ targets:
         # got a 404 and Sparkle reported "an error occurred in retrieving
         # update information" — correctly, since there was nothing there.
         #
-        # Must stay reachable for as long as any copy is installed: the feed is
-        # the only route by which a shipped build can ever be replaced.
-        SUFeedURL: https://hivinz.com/appcast.xml
+        # Update channel intentionally disabled for this local build (user
+        # chose to block updates): SUFeedURL is empty so the update menu is
+        # inert, and no installed copy can ever be replaced by Sparkle.
+        SUFeedURL: ""
         # The public half of the EdDSA key in the login keychain. Sparkle
         # refuses any update not signed by its private half, so a hijacked feed
         # or a swapped download cannot install code. Losing the private key
@@ -107,8 +108,8 @@ targets:
         # Set explicitly so Sparkle never asks on first launch. Left unset, it
         # shows a "check for updates automatically?" prompt, which is exactly
         # the permission this is meant to avoid.
-        SUEnableAutomaticChecks: true
-        SUAutomaticallyUpdate: true
+        SUEnableAutomaticChecks: false
+        SUAutomaticallyUpdate: false
         SUScheduledCheckInterval: 86400
     settings:
       base:
