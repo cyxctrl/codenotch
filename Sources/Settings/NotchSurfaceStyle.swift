@@ -54,10 +54,18 @@ enum NotchSurfaceStyle: String, CaseIterable, Identifiable {
     /// whiter than plain regular glass. The SDK's own recipe for dark glass,
     /// quoted in the `Glass.clear` doc comment, is clear glass over a
     /// transparent black beneath it; that black is `glassDim`.
+    ///
+    /// Behind `swift(>=6.2)` because the type `Glass` itself is absent from an
+    /// old SDK: `@available` cannot hide a declaration from a toolchain that
+    /// has never heard of its return type. Everything that reads this property
+    /// lives in `Sources/Compatibility/MacOS26Shims.swift`, which carries the
+    /// same `#if`.
+    #if swift(>=6.2)
     @available(macOS 26.0, *)
     var glass: Glass {
         effective == .darkGlass ? .clear : .regular
     }
+    #endif
 
     /// The wash drawn *beneath* the glass — never fed to `tint` — and only for
     /// `darkGlass`. `nil` for `.glass` is not "no wash yet": laying nothing of
