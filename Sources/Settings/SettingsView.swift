@@ -11,8 +11,10 @@ extension View {
     @ViewBuilder
     func glassBackground(in shape: some Shape) -> some View {
         // Routed through the fork's compat shim so an old SDK never has to
-        // see the `glassEffect` symbol (same glass, same material fallback).
-        compatGlassEffect(in: shape)
+        // see the `glassEffect` symbol. `.glass` is the system's own glass —
+        // the same `.regular` upstream asks for here — and its `glassDim` is
+        // nil, so nothing of ours is laid under the Settings chrome.
+        compatGlassEffect(.glass, in: shape)
     }
 }
 
@@ -365,8 +367,8 @@ struct SettingsView: View {
                     )
             } else {
                 Color.clear
-                    .compatGlassEffect(in: RoundedRectangle(cornerRadius: SettingsView.sidebarCornerRadius,
-                                                            style: .continuous))
+                    .compatGlassEffect(.glass, in: RoundedRectangle(cornerRadius: SettingsView.sidebarCornerRadius,
+                                                                   style: .continuous))
             }
         }
         .padding(SettingsView.sidebarInset)
@@ -405,7 +407,7 @@ struct SettingsView: View {
                             .overlay(Circle().strokeBorder(Color(nsColor: .separatorColor), lineWidth: 1))
                     } else {
                         Color.clear
-                            .compatGlassEffect(in: Circle())
+                            .compatGlassEffect(.glass, in: Circle())
                     }
                 }
                 .contentShape(Circle())

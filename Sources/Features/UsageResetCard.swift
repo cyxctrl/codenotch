@@ -23,17 +23,15 @@ struct UsageResetCard: View {
         stack
             .background {
                 // `isGlass` is only ever true where `glassEffect` exists; the
-                // availability check is what tells the compiler so.
+                // compat shim is what tells the compiler so on an old SDK.
                 if glassy {
-                    if #available(macOS 26.0, *) {
-                        Color.clear
-                            .glassEffect(surfaceStyle.glass, in: TooltipSilhouette(direction: direction, tailOffset: tailOffset))
-                            .background {
-                                if let dim = surfaceStyle.glassDim {
-                                    TooltipSilhouette(direction: direction, tailOffset: tailOffset).fill(dim)
-                                }
+                    Color.clear
+                        .compatGlassEffect(surfaceStyle, in: TooltipSilhouette(direction: direction, tailOffset: tailOffset))
+                        .background {
+                            if let dim = surfaceStyle.glassDim {
+                                TooltipSilhouette(direction: direction, tailOffset: tailOffset).fill(dim)
                             }
-                    }
+                        }
                 }
             }
     }

@@ -162,32 +162,30 @@ struct NotchRootView: View {
 
         return ZStack {
             if glassy {
-                if #available(macOS 26.0, *) {
-                    // The same layer twice, once without the material: an
-                    // offscreen `ImageRenderer` cannot draw the system glass
-                    // faithfully, so the pixel tests ask for the glass path
-                    // with the material left out and check the parts that are
-                    // ours. See TASKS.md, "The hardware's band stays black".
-                    if headlessGlass {
-                        Color.clear
-                            .frame(width: place.panelSize.width, height: place.panelSize.height)
-                            .background {
-                                if let dim = model.surfaceStyle.glassDim {
-                                    Rectangle().fill(dim)
-                                }
+                // The same layer twice, once without the material: an
+                // offscreen `ImageRenderer` cannot draw the system glass
+                // faithfully, so the pixel tests ask for the glass path
+                // with the material left out and check the parts that are
+                // ours. See TASKS.md, "The hardware's band stays black".
+                if headlessGlass {
+                    Color.clear
+                        .frame(width: place.panelSize.width, height: place.panelSize.height)
+                        .background {
+                            if let dim = model.surfaceStyle.glassDim {
+                                Rectangle().fill(dim)
                             }
-                            .id(model.isExpanded)
-                    } else {
-                        Color.clear
-                            .frame(width: place.panelSize.width, height: place.panelSize.height)
-                            .glassEffect(model.surfaceStyle.glass, in: Rectangle())
-                            .background {
-                                if let dim = model.surfaceStyle.glassDim {
-                                    Rectangle().fill(dim)
-                                }
+                        }
+                        .id(model.isExpanded)
+                } else {
+                    Color.clear
+                        .frame(width: place.panelSize.width, height: place.panelSize.height)
+                        .compatGlassEffect(model.surfaceStyle, in: Rectangle())
+                        .background {
+                            if let dim = model.surfaceStyle.glassDim {
+                                Rectangle().fill(dim)
                             }
-                            .id(model.isExpanded)
-                    }
+                        }
+                        .id(model.isExpanded)
                 }
             }
             
