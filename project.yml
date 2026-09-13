@@ -42,6 +42,10 @@ settings:
 packages:
   SwiftNIO:
     url: https://github.com/apple/swift-nio
+    # Not upstream's `from: 2.102.0`: 2.87.0 and later need Swift 6.1 tools,
+    # which Xcode 15.4 cannot resolve, and a floor of 2.102.0 leaves SwiftPM no
+    # older release to fall back to. SwiftPM skips the releases it cannot read,
+    # so the range lands on 2.86.2 — the version Package.resolved pins.
     from: "2.86.0"
   Sparkle:
     url: https://github.com/sparkle-project/Sparkle
