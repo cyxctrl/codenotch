@@ -158,12 +158,10 @@ struct NotchRootView: View {
 
         return ZStack {
             if glassy {
-                if #available(macOS 26.0, *) {
-                    Color.clear
-                        .frame(width: place.panelSize.width, height: place.panelSize.height)
-                        .glassEffect(.regular, in: Rectangle())
-                        .id(model.isExpanded)
-                }
+                Color.clear
+                    .frame(width: place.panelSize.width, height: place.panelSize.height)
+                    .compatGlassEffect(in: Rectangle())
+                    .id(model.isExpanded)
             }
             
             ZStack {

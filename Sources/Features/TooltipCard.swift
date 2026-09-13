@@ -197,11 +197,9 @@ private struct TooltipShell<Content: View>: View {
                 // the availability check is what tells the compiler so. Below
                 // that, `surfaceFill` has already painted the card opaque.
                 if glassy {
-                    if #available(macOS 26.0, *) {
-                        Color.clear
-                            .glassEffect(.regular, in: TooltipSilhouette(direction: direction,
-                                                                         tailOffset: tailOffset))
-                    }
+                    Color.clear
+                        .compatGlassEffect(in: TooltipSilhouette(direction: direction,
+                                                                tailOffset: tailOffset))
                 }
             }
     }

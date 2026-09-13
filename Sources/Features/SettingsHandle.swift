@@ -84,18 +84,14 @@ struct SettingsOrb: View {
     @ViewBuilder
     private var restingArc: some View {
         if glassy {
-            // `effective` is only ever `.glass` where `glassEffect` exists; the
-            // availability check is what tells the compiler so.
-            if #available(macOS 26.0, *) {
-                Color.clear
-                    .frame(width: 100, height: 100)
-                    .glassEffect(.regular, in: Rectangle())
-                    // The band's own inset cancels the extra stroke width here,
-                    // so this is the same circle the stroked arc follows.
-                    .frame(width: arcRadius * 2 + NotchLayout.orbStroke,
-                           height: arcRadius * 2 + NotchLayout.orbStroke)
-                    .clipShape(ArcBand(trim: restingTrim, lineWidth: NotchLayout.orbStroke))
-            }
+            Color.clear
+                .frame(width: 100, height: 100)
+                .compatGlassEffect(in: Rectangle())
+                // The band's own inset cancels the extra stroke width here,
+                // so this is the same circle the stroked arc follows.
+                .frame(width: arcRadius * 2 + NotchLayout.orbStroke,
+                       height: arcRadius * 2 + NotchLayout.orbStroke)
+                .clipShape(ArcBand(trim: restingTrim, lineWidth: NotchLayout.orbStroke))
         } else {
             Circle()
                 .trim(from: restingTrim.lowerBound, to: restingTrim.upperBound)
@@ -112,13 +108,11 @@ struct SettingsOrb: View {
     @ViewBuilder
     private var hoverDisc: some View {
         if glassy {
-            if #available(macOS 26.0, *) {
-                Color.clear
-                    .frame(width: 100, height: 100)
-                    .glassEffect(.regular.interactive(), in: Rectangle())
-                    .frame(width: NotchLayout.orbDiameter, height: NotchLayout.orbDiameter)
-                    .clipShape(Circle())
-            }
+            Color.clear
+                .frame(width: 100, height: 100)
+                .compatGlassEffect(in: Rectangle(), interactive: true)
+                .frame(width: NotchLayout.orbDiameter, height: NotchLayout.orbDiameter)
+                .clipShape(Circle())
         } else {
             Circle()
                 .fill(Palette.notch)

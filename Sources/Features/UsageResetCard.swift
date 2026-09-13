@@ -20,10 +20,9 @@ struct UsageResetCard: View {
         stack
             .background {
                 if glassy {
-                    if #available(macOS 26.0, *) {
-                        Color.clear
-                            .glassEffect(.regular, in: TooltipSilhouette(direction: direction, tailOffset: tailOffset))
-                    }
+                    Color.clear
+                        .compatGlassEffect(in: TooltipSilhouette(direction: direction,
+                                                                tailOffset: tailOffset))
                 }
             }
     }

@@ -271,7 +271,12 @@ final class NotchRenderTests: XCTestCase {
     }
 
     /// The glass style reaches the notch whether it is open or closed, as requested.
-    func testTheFoldedPillIsTransparentInTheGlassStyle() {
+    func testTheFoldedPillIsTransparentInTheGlassStyle() throws {
+        // Below macOS 26 there is no glass to hand the panel to: the style
+        // resolves to the solid one and the pill is painted opaque on purpose,
+        // which is what the sibling tests below pin. Nothing to read here.
+        try XCTSkipUnless(NotchSurfaceStyle.glassAvailable,
+                          "no Liquid Glass below macOS 26 — the glass style is the solid one")
         for edge in NotchEdge.allCases {
             let m = model(edge: edge)
             m.surfaceStyle = .glass
