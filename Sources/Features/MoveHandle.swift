@@ -80,15 +80,13 @@ struct MoveHandle: View {
     @ViewBuilder
     private var restingArc: some View {
         if glassy {
-            if #available(macOS 26.0, *) {
-                Color.clear
-                    .frame(width: 100, height: 100)
-                    .glassEffect(surfaceStyle.glass, in: Rectangle())
-                    .background { if let dim = surfaceStyle.glassDim { Rectangle().fill(dim) } }
-                    .frame(width: arcRadius * 2 + NotchLayout.orbStroke,
-                           height: arcRadius * 2 + NotchLayout.orbStroke)
-                    .clipShape(ArcBand(trim: restingTrim, lineWidth: NotchLayout.orbStroke))
-            }
+            Color.clear
+                .frame(width: 100, height: 100)
+                .compatGlassEffect(surfaceStyle, in: Rectangle())
+                .background { if let dim = surfaceStyle.glassDim { Rectangle().fill(dim) } }
+                .frame(width: arcRadius * 2 + NotchLayout.orbStroke,
+                       height: arcRadius * 2 + NotchLayout.orbStroke)
+                .clipShape(ArcBand(trim: restingTrim, lineWidth: NotchLayout.orbStroke))
         } else {
             Circle()
                 .trim(from: restingTrim.lowerBound, to: restingTrim.upperBound)
@@ -103,14 +101,12 @@ struct MoveHandle: View {
     @ViewBuilder
     private var hoverDisc: some View {
         if glassy {
-            if #available(macOS 26.0, *) {
-                Color.clear
-                    .frame(width: 100, height: 100)
-                    .glassEffect(surfaceStyle.glass.interactive(), in: Rectangle())
-                    .background { if let dim = surfaceStyle.glassDim { Rectangle().fill(dim) } }
-                    .frame(width: NotchLayout.orbDiameter, height: NotchLayout.orbDiameter)
-                    .clipShape(Circle())
-            }
+            Color.clear
+                .frame(width: 100, height: 100)
+                .compatGlassEffect(surfaceStyle, in: Rectangle(), interactive: true)
+                .background { if let dim = surfaceStyle.glassDim { Rectangle().fill(dim) } }
+                .frame(width: NotchLayout.orbDiameter, height: NotchLayout.orbDiameter)
+                .clipShape(Circle())
         } else {
             Circle()
                 .fill(Palette.notch)
