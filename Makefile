@@ -53,9 +53,12 @@ DEV_SIGN := CODE_SIGN_IDENTITY="-" DEVELOPMENT_TEAM="" CODE_SIGN_STYLE=Automatic
 # process"): re-sign framework and app in one pass after every build. Empty
 # whenever a real identity signs, where Xcode's own re-signing is already
 # consistent.
+# Takes the configuration whose product to re-sign as $(1): `install` builds
+# Release, and the Debug path this used to hardcode would name a bundle that
+# build never wrote.
 define DEV_RESIGN
 	@APP=$$(xcodebuild -project $(PROJECT) -scheme $(SCHEME) -destination '$(DEST)' \
-		-configuration Debug -showBuildSettings 2>/dev/null \
+		-configuration $(1) -showBuildSettings 2>/dev/null \
 		| awk -F' = ' '/ BUILT_PRODUCTS_DIR/ {print $$2; exit}')/$(APP_NAME).app; \
 	codesign --force --sign - $$APP/Contents/Frameworks/Sparkle.framework; \
 	codesign --force --sign - $$APP
@@ -79,12 +82,12 @@ gen:
 build: gen
 	xcodebuild -project $(PROJECT) -scheme $(SCHEME) -destination '$(DEST)' \
 		-configuration Debug $(DEV_SIGN) build
-	$(DEV_RESIGN)
+	$(call DEV_RESIGN,Debug)
 
 test: gen
 	xcodebuild -project $(PROJECT) -scheme $(SCHEME) -destination '$(DEST)' \
 		-configuration Debug $(DEV_SIGN) build-for-testing
-	$(DEV_RESIGN)
+	$(call DEV_RESIGN,Debug)
 	# The test host launches the app, so the re-sign has to land before the
 	# tests run — test-without-building against the bundle just signed above.
 	# build-for-testing (not build) is what compiles the test bundle the
@@ -124,9 +127,16 @@ run: build
 # signed. The app embeds Sparkle, and macOS rejects a bundle whose framework
 # and binary carry different Team IDs, so the whole bundle is signed with one
 # identity rather than left unsigned.
+#
+# "One identity" includes ad-hoc: dyld refuses the ad-hoc app and the
+# ad-hoc Sparkle beside it for the same reason it refuses two different Team
+# IDs, so the pair is re-signed in one pass afterwards — what `build` already
+# does for Debug. Without it the copy here builds fine, verifies fine, and
+# dies at launch with "Library not loaded: @rpath/Sparkle.framework".
 install: gen
 	xcodebuild -project $(PROJECT) -scheme $(SCHEME) -destination '$(DEST)' \
 		-configuration Release $(DEV_SIGN) build
+	$(call DEV_RESIGN,Release)
 	@APP=$$(xcodebuild -project $(PROJECT) -scheme $(SCHEME) -destination '$(DEST)' \
 		-configuration Release -showBuildSettings 2>/dev/null \
 		| awk -F' = ' '/ BUILT_PRODUCTS_DIR/ {print $$2; exit}')/Codenotch.app; \
