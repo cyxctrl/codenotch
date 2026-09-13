@@ -15,11 +15,24 @@ import SwiftUI
 /// `#available`; older ones never see the symbol. The maintainer's Xcode 26
 /// builds pass through unchanged.
 extension View {
-    /// Liquid Glass card or disc, or a material in the same shape on older macOS.
-    func compatGlassEffect<S: Shape>(in shape: S) -> some View {
+    /// Liquid Glass card or disc in `style`'s own variant, or a material in the
+    /// same shape on older macOS.
+    ///
+    /// `interactive` is upstream's `.regular.interactive()`: the glass answers the
+    /// pointer. There is no material equivalent — on the older systems this is the
+    /// branch that never runs, since `NotchSurfaceStyle.glassAvailable` is false
+    /// there — so the fallback stays the plain material.
+    ///
+    /// The style arrives as a `NotchSurfaceStyle` rather than as its `Glass` value
+    /// (which upstream spells at the call site) because `Glass` does not exist in
+    /// an old SDK: only this file may name it, and only under `swift(>=6.2)`.
+    func compatGlassEffect<S: Shape>(_ style: NotchSurfaceStyle,
+                                     in shape: S,
+                                     interactive: Bool = false) -> some View {
         #if swift(>=6.2)
         if #available(macOS 26, *) {
-            AnyView(background { Color.clear.glassEffect(.regular, in: shape) })
+            let glass: Glass = interactive ? style.glass.interactive() : style.glass
+            AnyView(background { Color.clear.glassEffect(glass, in: shape) })
         } else {
             AnyView(background(.regularMaterial, in: shape))
         }

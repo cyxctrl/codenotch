@@ -11,8 +11,10 @@ extension View {
     @ViewBuilder
     func glassBackground(in shape: some Shape) -> some View {
         // Routed through the fork's compat shim so an old SDK never has to
-        // see the `glassEffect` symbol (same glass, same material fallback).
-        compatGlassEffect(in: shape)
+        // see the `glassEffect` symbol. `.glass` is the system's own glass —
+        // the same `.regular` upstream asks for here — and its `glassDim` is
+        // nil, so nothing of ours is laid under the Settings chrome.
+        compatGlassEffect(.glass, in: shape)
     }
 }
 
