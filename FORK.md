@@ -29,6 +29,7 @@ git rebase --onto upstream/main <fork 基点> main   # 注意 --onto，理由见
 - [6. XyToken provider（fork 独有功能）](#6-xytoken-providerfork-独有功能)
 - [7. 浏览器会话 provider 的登录提示修复](#7-浏览器会话-provider-的登录提示修复)
 - [8. 玻璃样式测试在 macOS 26 以下跳过](#8-玻璃样式测试在-macos-26-以下跳过)
+- [9. Kimi OAuth token 自主续期](#9-kimi-oauth-token-自主续期)
 - [冲突热点（真实踩到过的）](#冲突热点真实踩到过的)
 - [旧工具链编译错误的常见形态](#旧工具链编译错误的常见形态)
 - [已被 upstream 吸收的本地改动](#已被-upstream-吸收的本地改动)
@@ -257,6 +258,80 @@ fork 在 `ProviderSummary` 上区分：借用凭据的 provider 仍看 `account(
 
 1.11.0 复核：upstream 自己在别的两个测试里用了 `NotchSurfaceStyle.glassAvailable`，但
 `testTheFoldedPillIsTransparentInTheGlassStyle` 仍然没有门禁 → 本地这行继续留着。
+
+## 9. Kimi OAuth token 自主续期
+
+**为什么存在**：upstream 的 `KimiProvider` 只**读** `~/.kimi-code/credentials/kimi-code.json`，
+注释里假定「token 会被 CLI 在正常使用中续期」。这个假定对 Kimi 不成立：
+
+- access token 只有 **900 秒**（`expires_in: 900`）；
+- refresh token 是**一次性**的——CLI 的 `tokenFromResponse` 在响应缺少 `refresh_token` 时直接抛
+  `OAuth response missing refresh_token`，也就是说服务端每次刷新都换发新的，旧的作废；
+- 唯一会续期的是 CLI 自己，且**只在它运行时**：任何一次 API 请求（含 TUI 的 `/usage`）都走
+  `OAuthManager.ensureFresh()`，把结果原子写回同一个文件。不跑 `kimi` 就没有任何东西续期。
+
+于是：登录后 15 分钟内能读到 1~3 次，之后每次轮询都在 `credentials.isExpired` 处抛
+`credentialExpired`；`UsageStore` 把它当成「陈旧」而保留上一份读数，那份读数的窗口重置时间早已
+过去 → `ResetCopy` 对所有「已过期」的窗口输出「正在重置…」，而它等的那次重取永远不会来。
+2026-09 实测时间线：10:27:04 重新登录写入 token → 10:42:04 过期 → 此后每 5 分钟一次
+`credentialExpired`；「只能登出再登录、且只正常一次」就是这么来的。
+
+**处理方式**：fork 自己发 CLI 那笔 refresh 请求，并按 CLI 的文件形态写回。每一步都是**逆向出来的
+私有协议**（`@moonshot-ai/kimi-code@0.42.0` 的 `dist/main.mjs`），不是 Kimi 承诺的接口，所以按
+「兼容机制、看结果」对待，与 `ClaudeTokenRefresher` 对待 `claude -p` 同类：
+
+1. 取 CLI 自己的跨进程锁 `<home>/oauth/kimi-code.lock`（proper-lockfile：`mkdir` 即持有、
+   `stale: 5000`、释放 `rmdir`、重试 120×500ms）。**必须**用同一把锁——refresh token 一次性，
+   两次并发刷新会让输的那一半作废，等于把用户的 CLI 踢下线。
+2. 拿到锁后**重读文件**：若已被 CLI 续期就直接用它、不发请求（CLI 自己的 `doEnsureFresh` 同样如此）。
+3. `POST https://auth.kimi.com/api/oauth/token`，form 为 `client_id`（CLI 内置的公开 id
+   `17e5f671-d194-4dfb-9706-5516cb48c098`）、`grant_type=refresh_token`、`refresh_token`，带
+   `X-Msh-*` 设备头（device_id、版本等全部读本机或 CLI 数据，读不到就省略该头）。
+4. 200 → 按 CLI 同样的严格度校验 `access_token`/`refresh_token`/`expires_in`，原子写回（6 个
+   snake_case 键、0600、`tmp`+`rename`）。
+
+失败时的行为是**有意选的，且都不比 upstream 更糟**：端点拒绝（`invalid_grant` / 401 / 403）→ 抛
+`needsAuth`（不写 tombstone，那是 CLI 的决定）；网络失败或取不到锁 → 抛 `credentialExpired`，
+**凭证原样不动**。
+
+续期时机照 CLI 的阈值：`max(300, expires_in / 2)`，即 900 秒的 token 在剩 7m30s 时续（对应 CLI 的
+`MIN_REFRESH_THRESHOLD_SECONDS = 300` 与 `REFRESH_THRESHOLD_RATIO = .5`），既不会比 CLI 更早
+浪费一笔请求，也不会留下「token 已死、这一轮读数被跳过」的窗口。
+
+**涉及文件**
+
+- `Sources/Providers/KimiTokenRefresher.swift`（新增）：`KimiTokenRefresher`（周期判断、锁、grant、
+  写回）、`KimiRefreshLock`（CLI 的锁协议）、`KimiAuthHost`（大陆/国际两个 auth host 的选择）、
+  `KimiDeviceIdentity`（`X-Msh-*` 头）
+- `Sources/Providers/KimiCredentials.swift`：新增 `homeURL`（`KIMI_CODE_HOME` 覆盖上移到此）、
+  `expiresIn` / `scope` / `tokenType`、`needsRenewal(now:)`、`write(_:to:)`；`load` 多读三个字段
+- `Sources/Providers/KimiProvider.swift`：`fetchSnapshot()` 改为先取 `refresher.usableCredential()`
+- `Tests/KimiTokenRefreshTests.swift`（新增）：16 个测试，全部指向 `$TMPDIR` 下的临时 home
+
+与「已被 upstream 吸收的本地改动」里那个旧 Kimi 提交 `c0aeaf0` 区分：那是读 `config.toml` 的
+API key，功能已在上游；本节是上游改成读 OAuth token **之后**新出现的差异。
+
+**rebase 时怎么判断**：
+
+1. **上游若自己开始续期，就把这一整笔提交丢掉**（代码 + 本节），并移到「已被 upstream 吸收」。信号：
+
+   ```sh
+   git diff upstream/main HEAD -- Sources/Providers/KimiProvider.swift Sources/Providers/KimiCredentials.swift
+   grep -rn "oauth/token\|refresh_token" Sources/Providers/ | grep -v KimiTokenRefresher
+   ```
+
+   上游的 `KimiProvider` 里出现写凭证、或 401 后重取的动作，就说明它修了同一件事。
+2. **上游没修就留着。** 私有协议对不上时症状会自己现形：
+
+   ```sh
+   log stream --predicate 'subsystem == "com.vinz.codenotch"' --level debug | grep -i kimi
+   ```
+
+   `the token endpoint answered 4xx` 或 `could not take the CLI's refresh lock` = Kimi 改了端点或
+   CLI。先确认凭证文件没被动过（`stat` 的 mtime、`expires_at` 未变即安全），再决定跟不跟。
+3. 与第 4 节无关：Claude 是「跑 CLI 续期」，Kimi 是「自己发请求」。取舍在 token 寿命——Claude 的
+   刷新一次管八小时，Kimi 的只有十五分钟，后者每 13 分钟起一个 node 进程不划算，而 `kimi login`
+   还会顺带重写 `config.toml`。
 
 ## 冲突热点（真实踩到过的）
 
