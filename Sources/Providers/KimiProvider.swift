@@ -4,23 +4,34 @@ import os
 /// Reads Kimi Code usage from the endpoint the CLI's own `/usage` asks, with
 /// the OAuth token the CLI stores on sign-in — see `KimiCredentials`.
 ///
-/// The numbers are Kimi's, so this is `.official`. The token expires every
-/// fifteen minutes and the CLI renews it as it runs; an expired one is
-/// `.credentialExpired`, the same answer Grok gives, because minting a new
-/// token here would race the CLI for the file. A 404 is the endpoint's own
-/// answer for an account with no Kimi Code plan — readable, but metering
-/// nothing, and not an error.
+/// The numbers are Kimi's, so this is `.official`. The token lives fifteen
+/// minutes, and the CLI renews it only while it is running, so the credential
+/// is handed to `KimiTokenRefresher` rather than used as found: reading it
+/// alone works for a quarter of an hour after each sign-in and then reports
+/// `.credentialExpired` for the rest of the day, which is the frozen ring this
+/// pair of files was written for. A 404 is the endpoint's own answer for an
+/// account with no Kimi Code plan — readable, but metering nothing, and not an
+/// error.
 actor KimiProvider: UsageProvider {
     nonisolated let id = "kimi"
     nonisolated let displayName = "Kimi"
     nonisolated let glyph = ProviderGlyph.kimi
 
     private let session: URLSession
-    private let authURL: URL
+    private let refresher: KimiTokenRefresher
 
-    init(session: URLSession = .shared, authURL: URL = KimiCredentials.authURL) {
+    init(session: URLSession = .shared,
+         authURL: URL = KimiCredentials.authURL,
+         refresher: KimiTokenRefresher? = nil) {
         self.session = session
-        self.authURL = authURL
+        // The credential is at `<home>/credentials/kimi-code.json`, so the data
+        // root the renewal reads its lock and device id from comes back out of
+        // the file's own path — one URL pointed at a temporary directory in a
+        // test is then enough for both halves.
+        self.refresher = refresher ?? KimiTokenRefresher(
+            session: session,
+            home: KimiCredentials.homeURL(containing: authURL)
+        )
     }
 
     nonisolated var signInRoute: SignInRoute {
@@ -30,7 +41,10 @@ actor KimiProvider: UsageProvider {
     nonisolated func account() -> ProviderAccount? { KimiCredentials.account() }
 
     func fetchSnapshot() async throws -> ProviderSnapshot {
-        let credentials = try KimiCredentials.load(from: authURL)
+        let credentials = try await refresher.usableCredential()
+        // The backstop, not the answer: a credential still expired after the
+        // renewal attempt is one no request can succeed with, and saying so here
+        // is cheaper than a guaranteed 401.
         if credentials.isExpired { throw UsageProviderError.credentialExpired }
 
         let body = try await fetch(token: credentials.accessToken)
