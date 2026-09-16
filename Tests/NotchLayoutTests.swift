@@ -710,6 +710,11 @@ final class NotchSurfaceStyleTests: XCTestCase {
     /// A black `tint` on adaptive `.regular` glass rendered lighter, not
     /// darker, so `darkGlass` asks for the clear variant and does its own
     /// darkening underneath. `glass` must keep asking for plain `.regular`.
+    ///
+    /// Behind `swift(>=6.2)`, not merely `#available`: the `Glass` type this
+    /// compares does not exist in an old SDK, so the method cannot be compiled
+    /// there at all — the same reason `NotchSurfaceStyle.glass` is gated.
+    #if swift(>=6.2)
     func testDarkGlassAsksForClearGlassAndGlassForRegular() throws {
         guard #available(macOS 26.0, *) else {
             throw XCTSkip("Glass does not exist before macOS 26")
@@ -717,6 +722,7 @@ final class NotchSurfaceStyleTests: XCTestCase {
         XCTAssertEqual(NotchSurfaceStyle.darkGlass.glass, .clear)
         XCTAssertEqual(NotchSurfaceStyle.glass.glass, .regular)
     }
+    #endif
 
     func testSolidIsNotGlass() {
         XCTAssertFalse(NotchSurfaceStyle.solid.isGlass)
