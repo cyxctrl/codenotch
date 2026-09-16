@@ -12,8 +12,10 @@ git rebase --onto upstream/main <fork 基点> main   # 注意 --onto，理由见
 这份文档的唯一目的：**下次 rebase 时不必重新推导「这条改动为什么存在、还需不需要」。**
 每节按同一格式写——为什么存在 / 涉及文件 / rebase 时怎么判断。
 
-> 写入时的基线：`upstream/main = 6c28672`（1.11.0），本机 **macOS 14.3 + Xcode 15.4（Swift 5.10）**。
-> 上游在 1.11.0 之前重写过全部历史（见「上游重写过历史」），旧 hash `abccf0e` 已不在 upstream。
+> 写入时的基线：`upstream/main = a42c777`——版本号**仍是 1.11.0 (13)**，这 52 个提交还没发版
+>（大半是 Windows 端），本机 **macOS 14.3 + Xcode 15.4（Swift 5.10）**。
+> 上游在 1.11.0 之前重写过全部历史（见「上游重写过历史」），旧 hash `abccf0e` 已不在 upstream；
+> **这一轮没有重写**：`git merge-base main upstream/main` 有值，就是上轮的基点 `6c28672`。
 > 每次 rebase 后请更新这一行和文中已过期的结论（见末尾「维护」）。
 
 ## 目录
@@ -67,6 +69,10 @@ done
 同一棵树若有多个 commit，再对 message 和日期（本轮 `85fc743` 是唯一命中）。
 **上游若再重写一次，重复这个映射即可，不要因为「没有共同祖先」而放弃 fork 的提交。**
 
+本轮（1.11.0 → 仍是 1.11.0，52 个提交）复核：**历史没有重写**，`git merge-base main upstream/main`
+输出 `6c28672`（正是上轮的基点）。所以**下次先跑这一条判断**：有输出就走普通 rebase / `--onto`
+都行，输出为空才需要去比对 tree。
+
 ## rebase 流程与验证基线
 
 ```sh
@@ -83,11 +89,14 @@ make test                 # 期望 0 failures
 Scripts/install-app.sh    # 装到 /Applications，并确认进程真的起来
 ```
 
-1.10 → 1.11 那轮的实际命令：`git rebase --onto upstream/main abccf0e main`。
+本轮（52 个提交、仍是 1.11.0）的实际命令：`git rebase --onto upstream/main 6c28672 main`。
+冲突集中在两处：`project.yml`（upstream 新增 `- uk` 本地化，本地是 `LSMinimumSystemVersion`）
+和六个玻璃调用点（见第 1 节），其余 12 个 fork 提交干净落地。
 
-macOS 14.3 + Xcode 15.4 上的实测基线：**1531 个测试通过、4 个跳过**（1.10.0 时是 1387）。
-测试总数会随 upstream 增长，**要盯的是「0 failures」，不是具体数字**。
-1.11.0 那轮 `Scripts/install-app.sh` 装出 **1.11.0 (13)**、ad-hoc 签名，进程正常起来。
+macOS 14.3 + Xcode 15.4 上的实测基线：**1566 个测试通过、5 个跳过**（1.10.0 是 1387，1.11.0 首发是
+1531/4）。第 5 个跳过是 upstream 自己新写、自己跳过的 `testTheFoldedPillCarriesTheDimInTheDarkGlassStyle`
+（见第 8 节）。测试总数会随 upstream 增长，**要盯的是「0 failures」，不是具体数字**。
+本轮 `Scripts/install-app.sh` 装出 **1.11.0 (13)**、ad-hoc 签名，`/Applications` 那个进程正常起来。
 
 ## 1. macOS 14.3 部署目标与 SDK shim
 
@@ -97,8 +106,11 @@ macOS 14.3 + Xcode 15.4 上的实测基线：**1531 个测试通过、4 个跳�
 
 - `project.yml`：`deploymentTarget: 14.3`、`projectFormat: xcode15_0`
 - `Sources/Info.plist`：`LSMinimumSystemVersion` = 14.3
-- `Sources/Compatibility/MacOS26Shims.swift`：`compatGlassEffect(in:interactive:)`、
-  `compatPointerStyle(active:)`
+- `Sources/Compatibility/MacOS26Shims.swift`：`compatGlassEffect(_ style: NotchSurfaceStyle,
+  in:interactive:)`、`compatPointerStyle(active:)`
+- `Sources/Settings/NotchSurfaceStyle.swift`：`var glass: Glass` 连同它的文档整段在
+  `#if swift(>=6.2)` 里（理由见下）
+- `Tests/NotchLayoutTests.swift`：唯一比较 `glass` 值的那个测试同样在 `#if swift(>=6.2)` 里
 - 调用点：`SettingsView`、`NotchRootView`、`MoveHandle`、`SettingsHandle`、`TooltipCard`、`UsageResetCard`
 
 **rebase 时怎么判断**：本机还在 macOS 14 / Xcode 15.4 上就留着。shim 用
@@ -106,8 +118,20 @@ macOS 14.3 + Xcode 15.4 上的实测基线：**1531 个测试通过、4 个跳�
 Xcode 15.4 = 5.10）：新工具链编译真正的修饰符，旧工具链永远看不到那个符号。
 
 每次 upstream 新增 `glassEffect` / `pointerStyle` 调用点，**编译期就会报错**，照既有形态改：
-把 `#available(macOS 26.0, *)` 分支换成无条件的 `compat*` 调用（`.regular.interactive()`
-对应 `interactive: true`）。**不要**在旧 SDK 里保留「`#available` 包着新符号」的写法。
+把 `#available(macOS 26.0, *)` 块换成无条件的 `compat*` 调用。**不要**在旧 SDK 里保留
+「`#available` 包着新符号」的写法。
+
+`#if swift(>=6.2)` 卡的是**两条**边界，不只是修饰符：
+
+1. 修饰符本身（`glassEffect`、`pointerStyle`）——不过 `#if` 的话编译器看不到符号。
+2. **类型本身**：`NotchSurfaceStyle.glass` 返回 macOS 26 的 `Glass`，而 `@available` 门禁不了
+   「返回类型在这个工具链里根本不存在」的声明，所以那个属性——以及唯一比较它的测试——
+   整段进 `#if`。
+
+因此 shim 收的是 `NotchSurfaceStyle` 而不是 `Glass`，**`Glass` 这个名字只允许出现在
+`Sources/Compatibility/MacOS26Shims.swift`**，调用点永远不写它。darkGlass 把这条逼了出来：
+upstream 从 `.glassEffect(.regular, …)` 改成 `.glassEffect(surfaceStyle.glass, …)`（`.regular`
+或 `.clear`），shim 若还把 `.regular` 写死，macOS 26 上 fork 的暗色玻璃就画错了。
 
 排查命令：
 
@@ -115,8 +139,17 @@ Xcode 15.4 = 5.10）：新工具链编译真正的修饰符，旧工具链永远
 grep -rn 'glassEffect\|pointerStyle' Sources/ | grep -v 'Compatibility/MacOS26Shims.swift'
 ```
 
-1.11.0 复核：上游新增的 Kiro / MiniMax / 日进度环代码**没有**新的 `glassEffect` / `pointerStyle`
-调用点（这两个词只出现在注释里），上面那条 grep 是干净的。
+本轮复核：上面那条 grep 干净。改动落在六处——MoveHandle / SettingsHandle / TooltipCard /
+UsageResetCard / NotchRootView 换成 `compatGlassEffect(surfaceStyle, in: …)`，SettingsView 的
+`glassBackground(in:)` 传 `.glass`（正是 upstream 在那儿要的 `.regular`；它的 `glassDim` 是 nil，
+不会往设置页底下铺东西）。
+
+upstream 自己的 `.background { if let dim = surfaceStyle.glassDim { … } }`（暗色玻璃底下的那层 wash，
+只是个 `Color`）**留在调用点**，不搬进 shim。
+
+NotchRootView 多一层：upstream 新加了 `if headlessGlass { … } else { … }`（像素测试要「走玻璃路径、
+但没有材质」的那一层）。**保留 upstream 的 if/else 结构**，只把 else 分支里的 `glassEffect` 换成
+shim——不要像上一轮那样把整块压成一次调用，压掉就丢了 headless 路径。
 
 ## 2. ad-hoc 签名、DEV_RESIGN 与安装路径
 
@@ -146,6 +179,9 @@ Release 产物签名，而它旁边的 Sparkle 框架也是 ad-hoc、没有 Team
 Scripts/install-app.sh     # 退出码非 0 就是没起来
 ```
 
+本轮复核：`Makefile` 上 fork 的 `DEV_RESIGN` / `install` 与 upstream 的 SwiftPM 逻辑仍然各占一块、
+原样共存；`Scripts/install-app.sh` 无 upstream 改动。本轮装出 1.11.0 (13)、ad-hoc，进程起来了。
+
 ## 3. SwiftNIO 固定在 2.86.x
 
 **为什么存在**：upstream 用 SwiftNIO 实现 phone link。**2.87.0 起要求 Swift 6.1 tools**，
@@ -174,8 +210,9 @@ SwiftPM 会跳过自己读不了的版本，所以 `from: "2.86.0"` 会落在 2.
 重写到缓存目录做离线解析（注意工具链的 `swift-tools-version` 检查仍然生效）。
 本机现状：**HTTPS:443 到 github.com 不通，SSH:22 通**——所以 `upstream` remote 已指向
 `git@github.com:vinzdg/codenotch.git`；SwiftPM 解析走缓存，`make gen` 从仓库根的
-`Package.resolved` 起手，不需要联网。1.11.0 那轮 `project.yml` 是干净合并（upstream 只改了
-`MARKETING_VERSION` / `CURRENT_PROJECT_VERSION`），pin 没被盖掉——但每次仍要核对上面三个文件。
+`Package.resolved` 起手，不需要联网。**每轮仍要核对上面三个文件**，不过两轮 1.11.0 都是干净合并：
+upstream 只改过 `MARKETING_VERSION` / `CURRENT_PROJECT_VERSION`，本轮 52 个提交没碰 `packages:` 段、
+也没碰 `Package.resolved`，fork 的 pin 原样落地。
 
 ## 4. Claude provider 不交给 UsageStore
 
@@ -190,8 +227,10 @@ SwiftPM 会跳过自己读不了的版本，所以 `from: "2.86.0"` 会落在 2.
 冲突时**保留 upstream 的结构**，只在交给 `UsageStore` 的那一处继续过滤。
 想恢复 Claude ring，就是去掉那行 filter。
 
-1.11.0 复核：上游把 `allProviders` 又加长了一截（MiniMax、Kiro），filter 那一行仍在原位，
+1.11.0 初轮复核：上游把 `allProviders` 又加长了一截（MiniMax、Kiro），filter 那一行仍在原位，
 `preferences.reconcile(discoveredIDs:)` 依旧拿全集。
+本轮复核：`allProviders` 再长一截（Claude Desktop、日进度环等），结构未变——Claude 的 provider 仍
+在 store 之外构造并保留，只有交给 `UsageStore` 的那一处过滤。
 
 ## 5. 关闭 Sparkle 自动更新
 
@@ -205,8 +244,10 @@ SwiftPM 会跳过自己读不了的版本，所以 `from: "2.86.0"` 会落在 2.
 
 **rebase 时怎么判断**：upstream 若改了这些键的默认值，继续保持 false / 空。
 
-1.11.0 复核：upstream 的 `Info.plist` 依然是 `true` / `true` / `https://hivinz.com/appcast.xml`，
+1.11.0 初轮复核：upstream 的 `Info.plist` 依然是 `true` / `true` / `https://hivinz.com/appcast.xml`，
 本地仍是 `false` / `false` / 空——保持。
+本轮复核：三项键值 upstream 依旧未变，本地依旧 `false` / `false` / 空；`project.yml` 里
+`SUFeedURL: ""` 及其注释也没被 upstream 动过。
 
 ## 6. XyToken provider（fork 独有功能）
 
@@ -227,6 +268,10 @@ SwiftPM 会跳过自己读不了的版本，所以 `from: "2.86.0"` 会落在 2.
 `Sites.swift` 里相邻的 `static let`／`static func`（xytoken 紧挨 MiniMax 的 `minimax(region:)`）
 仍然是最常见的冲突点。
 
+本轮复核：`Sites.swift` 干净合并（fork 的 `static let xytoken` 仍追加在 MiniMax 之后，upstream 这轮
+没往这个文件加新 site）；`AppDelegate` 里 `webProviders = [deepSeek, xytoken]` 与
+`fleet.signInItems = [deepSeek, miniMaxWeb, xytoken]` 都在原位。
+
 ## 7. 浏览器会话 provider 的登录提示修复
 
 **为什么存在**：`WebSessionProvider` 没有账号元数据。upstream 的设置页把「没有 account」
@@ -244,6 +289,8 @@ fork 在 `ProviderSummary` 上区分：借用凭据的 provider 仍看 `account(
 
 1.10.0 与 1.11.0 两次复核结论都是**上游没修**：`ProviderAccount` 里只有 `needsSignInRenewal`，
 `UsageStore` 组装 `ProviderSummary` 时也不传 `needsSignIn`。所以本地版本继续留着。
+本轮复核仍是**上游没修**：`grep -rn needsSignIn Sources/` 只命中 `needsSignInRenewal`，
+`UsageStore.swift` 组装 `ProviderSummary` 的那一处依旧只传它。
 
 ## 8. 玻璃样式测试在 macOS 26 以下跳过
 
@@ -256,8 +303,13 @@ fork 在 `ProviderSummary` 上区分：借用凭据的 provider 仍看 `account(
 **rebase 时怎么判断**：这是**测试适配，不是决策**。upstream 若自己加了 `glassAvailable` 门禁，
 本地这行就该删。
 
-1.11.0 复核：upstream 自己在别的两个测试里用了 `NotchSurfaceStyle.glassAvailable`，但
+1.11.0 初轮复核：upstream 自己在别的两个测试里用了 `NotchSurfaceStyle.glassAvailable`，但
 `testTheFoldedPillIsTransparentInTheGlassStyle` 仍然没有门禁 → 本地这行继续留着。
+本轮复核：upstream 把这个测试重写了（改走 headless glass，加了「三格尺寸」的注释），但**仍然没有
+门禁**，所以本地那行继续留。跟着 upstream 的新签名，它现在是 `throws` + 方法体第一行的
+`try XCTSkipUnless(NotchSurfaceStyle.glassAvailable, …)`。upstream 自己新增的
+`testTheFoldedPillCarriesTheDimInTheDarkGlassStyle` 用 `#available` 自行跳过——那是它自己的门禁，
+在 macOS 14 上表现为「跳过数从 4 变成 5」，不是本地要删的东西。
 
 ## 9. Kimi OAuth token 自主续期
 
@@ -333,6 +385,10 @@ API key，功能已在上游；本节是上游改成读 OAuth token **之后**�
    刷新一次管八小时，Kimi 的只有十五分钟，后者每 13 分钟起一个 node 进程不划算，而 `kimi login`
    还会顺带重写 `config.toml`。
 
+本轮复核：**上游没修**。信号那条 grep 干净——`oauth/token` / `refresh_token` 只出现在 fork 的
+`KimiTokenRefresher.swift` 和 fork 改过的 `KimiCredentials.swift` 里；upstream 的 `KimiProvider` 仍然
+只读凭证，`fetchSnapshot()` 里没有任何写回或 401 重取的动作。这一整笔提交继续留着。
+
 ## 冲突热点（真实踩到过的）
 
 | 位置 | 现象 | 处理 |
@@ -343,6 +399,8 @@ API key，功能已在上游；本节是上游改成读 OAuth token **之后**�
 | `AppDelegate.swift` | provider 组装被 upstream 重构 | 见第 4 节 |
 | `Sites.swift` | 两个相邻的 site 定义 | 见第 6 节 |
 | `Info.plist` | `LSMinimumSystemVersion` 15.0 vs 14.3 | 保留 14.3 |
+| `NotchSurfaceStyle.swift` | upstream 新增的 `glass: Glass` 在旧 SDK 里连**类型**都不存在，`@available` 救不了 | 属性与比较它的测试整段进 `#if swift(>=6.2)`，见第 1 节 |
+| `MacOS26Shims.swift` 的签名 | shim 收 `Glass` 则调用点在旧 SDK 上必编译失败 | shim 只收 `NotchSurfaceStyle`，调用点不写 `Glass`，见第 1 节 |
 | `Makefile` | upstream 的 SwiftPM 逻辑与 fork 的签名逻辑在同一块 | 两边都留 |
 | `Package.resolved` | upstream 新增的锁定文件会盖掉 fork 的 pin | 见第 3 节 |
 
@@ -363,6 +421,10 @@ API key，功能已在上游；本节是上游改成读 OAuth token **之后**�
 - **类型推断差异**：字面量需要显式类型，例如 `[TimeInterval(18000), …]`（见 `OpenCodeUsageTests`）。
   5.10 不会把整数算术折叠成 `Double`，所以 `[5 * 3600, 7 * 86400]` 匹配不上 `[TimeInterval?]`，
   要写成 `[TimeInterval(5 * 3600), TimeInterval(7 * 86400)]`（1.11.0 的 `Tests/MiniMaxUsageTests.swift`）。
+- **类型不存在，而不是 API 不存在**：`@available` 门禁不了「返回类型不在这个 SDK 里」的声明——
+  `NotchSurfaceStyle.glass` 返回 `Glass`，只能整段 `#if swift(>=6.2)`（见第 1 节）。同理，测试里
+  比较这个值的断言要一起进 `#if`，否则**测试目标**编译失败——`make build` 仍是绿的，只有
+  `make test` 会报 `enum case 'glass' cannot be used as an instance member`。
 
 ## 已被 upstream 吸收的本地改动
 
@@ -384,8 +446,9 @@ git cherry -v upstream/main main
 `git cherry` 显示 `-` 才是真正被吸收。**upstream 改写过的同一功能会显示 `+`**，
 仍然需要人工比对——Kimi 就是这种情况（功能已在上游，patch-id 不同）。
 
-1.11.0 复核：**没有新增被吸收的条目**，`git cherry -v upstream/main main` 全部为 `+`。
-历史重写不影响这个判断——`cherry` 比的是 patch 内容，不是 commit hash。
+1.11.0 初轮复核：**没有新增被吸收的条目**，`git cherry -v upstream/main main` 全部为 `+`。
+本轮复核（52 个提交）：同样**没有**，12 个 fork 提交全为 `+`。历史重写不影响这个判断——
+`cherry` 比的是 patch 内容，不是 commit hash。
 
 ## 维护
 
