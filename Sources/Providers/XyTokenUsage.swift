@@ -35,6 +35,8 @@ enum XyTokenUsage {
                     let amount: Double?
                     let amount_used: Double?
                     let window_end: TimeInterval?
+                    let period_value: Double?
+                    let period_unit: String?
                 }
                 let quota_limits: [QuotaLimit]?
             }
@@ -62,12 +64,32 @@ enum XyTokenUsage {
                 id: limit.rule_key ?? "limit-\(index)",
                 label: limit.name ?? "Limit",
                 usedFraction: used / amount,
-                resetsAt: limit.window_end.map { Date(timeIntervalSince1970: $0) }
+                resetsAt: limit.window_end.map { Date(timeIntervalSince1970: $0) },
+                duration: duration(periodValue: limit.period_value, periodUnit: limit.period_unit)
             ))
         }
         guard !windows.isEmpty else {
             throw UsageProviderError.nothingMetered("XyToken has no active quota windows")
         }
         return windows
+    }
+
+    /// Length of one quota cycle, for the tooltip's pace line.
+    ///
+    /// Read from the limit's own period rather than from `window_end -
+    /// window_start`: in the recorded capture both windows report the same
+    /// `window_start`, and the day window's span is 8.14 h — exactly the time
+    /// left before midnight at the moment of the call — so that field marks
+    /// when the request was made, not when the cycle began. An unknown unit
+    /// leaves it nil, which costs only the pace line.
+    private static func duration(periodValue: Double?, periodUnit: String?) -> TimeInterval? {
+        guard let periodValue, periodValue.isFinite, periodValue > 0,
+              let unit = periodUnit?.lowercased() else { return nil }
+        switch unit {
+        case "hour":  return periodValue * 3600
+        case "day":   return periodValue * 86_400
+        case "week":  return periodValue * 7 * 86_400
+        default:      return nil
+        }
     }
 }
