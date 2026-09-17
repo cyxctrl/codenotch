@@ -93,6 +93,63 @@ final class XyTokenUsageTests: XCTestCase {
         XCTAssertEqual(windows[1].usedFraction ?? -1, 0.05, accuracy: 0.0001)
         XCTAssertEqual(windows[0].resetsAt, Date(timeIntervalSince1970: 1788969600))
         XCTAssertEqual(windows[1].resetsAt, Date(timeIntervalSince1970: 1789315200))
+        XCTAssertEqual(windows[0].duration, 86_400)
+        XCTAssertEqual(windows[1].duration, 7 * 86_400)
+    }
+
+    /// The cycle length comes from the limit's own period. `window_start` is
+    /// unusable for this — in the recorded capture it is the instant of the
+    /// call, which would make the day window 8.14 h long and leave the pace
+    /// line reading as if no time had passed.
+    func testDurationComesFromTheLimitsOwnPeriod() throws {
+        let json = """
+        { "data": { "subscriptions": [ { "quota_limits": [
+            { "rule_key": "hour:3|hour:00", "name": "每三小时",
+              "amount": 1000, "amount_used": 100,
+              "period_value": 3, "period_unit": "hour",
+              "window_end": 1788969600 },
+            { "rule_key": "month:1|day:1,00:00", "name": "每月",
+              "amount": 1000, "amount_used": 100,
+              "period_value": 1, "period_unit": "month",
+              "window_end": 1788969600 } ] } ] } }
+        """
+        let windows = try XyTokenUsage.windows(fromJSON: json)
+        XCTAssertEqual(windows[0].duration, 3 * 3600)
+        XCTAssertNil(windows[1].duration,
+                     "an unreckoned unit leaves the pace line off rather than inventing a cycle")
+    }
+
+    /// A limit that states no period keeps its percentage and loses only the
+    /// pace line — the reading is still worth drawing.
+    func testALimitWithoutAPeriodStillReportsItsFraction() throws {
+        let json = """
+        { "data": { "subscriptions": [ { "quota_limits": [
+            { "rule_key": "day:1|day:00:00", "name": "每日",
+              "amount": 1000, "amount_used": 250,
+              "window_end": 1788969600 } ] } ] } }
+        """
+        let windows = try XyTokenUsage.windows(fromJSON: json)
+        XCTAssertEqual(windows[0].usedFraction ?? -1, 0.25, accuracy: 0.0001)
+        XCTAssertNil(windows[0].duration)
+    }
+
+    /// The reason `duration` is carried at all: the tooltip's pace line reads
+    /// it. A tenth of the day's allowance spent with a third of the day gone
+    /// is usage behind schedule, which is the state this makes visible.
+    func testTheDayWindowGetsAPaceReading() throws {
+        let json = """
+        { "data": { "subscriptions": [ { "quota_limits": [
+            { "rule_key": "day:1|day:00:00", "name": "每日",
+              "amount": 1000, "amount_used": 100,
+              "period_value": 1, "period_unit": "day",
+              "window_end": 1788969600 } ] } ] } }
+        """
+        let window = try XCTUnwrap(XyTokenUsage.windows(fromJSON: json).first)
+        let now = Date(timeIntervalSince1970: 1788969600 - 16 * 3600)
+        let pace = try XCTUnwrap(window.usagePace(now: now))
+        XCTAssertEqual(pace.percentagePoints, -23.33333, accuracy: 0.0001)
+        XCTAssertFalse(pace.isDeficit)
+        XCTAssertEqual(pace.summary, "23.3% reserved")
     }
 
     /// `all_subscriptions` repeats the active windows plus expired ones — only
