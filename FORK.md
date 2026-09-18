@@ -12,10 +12,11 @@ git rebase --onto upstream/main <fork 基点> main   # 注意 --onto，理由见
 这份文档的唯一目的：**下次 rebase 时不必重新推导「这条改动为什么存在、还需不需要」。**
 每节按同一格式写——为什么存在 / 涉及文件 / rebase 时怎么判断。
 
-> 写入时的基线：`upstream/main = 3251208`——版本号 **1.12.0 (14)**，本轮只有 3 个提交（发版、appcast、
-> notch 空转 CPU 优化），本机 **macOS 14.3 + Xcode 15.4（Swift 5.10）**。
+> 写入时的基线：`upstream/main = bcd063c`——版本号 **1.13.1 (16)**，本轮 61 个提交（Windows 侧大改、
+> 乌克兰语本地化补全、Grok provider、keychain "Deny" 语义、Claude 续期进程收敛），本机
+> **macOS 14.3 + Xcode 15.4（Swift 5.10）**。
 > 上游在 1.11.0 之前重写过全部历史（见「上游重写过历史」），旧 hash `abccf0e` 已不在 upstream；
-> **这一轮没有重写**：`git merge-base main upstream/main` 有值，就是上轮的基点 `a42c777`。
+> **这一轮没有重写**：`git merge-base main upstream/main` 有值，就是上轮的基点 `3251208`。
 > 每次 rebase 后请更新这一行和文中已过期的结论（见末尾「维护」）。
 
 ## 目录
@@ -26,12 +27,11 @@ git rebase --onto upstream/main <fork 基点> main   # 注意 --onto，理由见
 - [1. macOS 14.3 部署目标与 SDK shim](#1-macos-143-部署目标与-sdk-shim)
 - [2. ad-hoc 签名、DEV_RESIGN 与安装路径](#2-ad-hoc-签名dev_resign-与安装路径)
 - [3. SwiftNIO 固定在 2.86.x](#3-swiftnio-固定在-286x)
-- [4. Claude provider 不交给 UsageStore](#4-claude-provider-不交给-usagestore)
-- [5. 关闭 Sparkle 自动更新](#5-关闭-sparkle-自动更新)
-- [6. XyToken provider（fork 独有功能）](#6-xytoken-providerfork-独有功能)
-- [7. 浏览器会话 provider 的登录提示修复](#7-浏览器会话-provider-的登录提示修复)
-- [8. 玻璃样式测试在 macOS 26 以下跳过](#8-玻璃样式测试在-macos-26-以下跳过)
-- [9. Kimi OAuth token 自主续期](#9-kimi-oauth-token-自主续期)
+- [4. 关闭 Sparkle 自动更新](#4-关闭-sparkle-自动更新)
+- [5. XyToken provider（fork 独有功能）](#5-xytoken-providerfork-独有功能)
+- [6. 浏览器会话 provider 的登录提示修复](#6-浏览器会话-provider-的登录提示修复)
+- [7. 玻璃样式测试在 macOS 26 以下跳过](#7-玻璃样式测试在-macos-26-以下跳过)
+- [8. Kimi OAuth token 自主续期](#8-kimi-oauth-token-自主续期)
 - [冲突热点（真实踩到过的）](#冲突热点真实踩到过的)
 - [旧工具链编译错误的常见形态](#旧工具链编译错误的常见形态)
 - [已被 upstream 吸收的本地改动](#已被-upstream-吸收的本地改动)
@@ -44,8 +44,9 @@ git rebase --onto upstream/main <fork 基点> main   # 注意 --onto，理由见
    也救不了——编译器连符号都看不到。
 2. **本机钥匙串里没有签名证书**，所有构建都是 ad-hoc 签名。ad-hoc 签名每次构建都变，
    钥匙串的 "Always Allow" 授权留不住；且 ad-hoc + hardened runtime 会让 dyld 拒绝加载 Sparkle。
+   （授权留不住这件事本身**不再有代价**了：后台读取不需要授权，见「已被 upstream 吸收的本地改动」。）
 
-其余差异（XyToken、关闭自动更新、Claude provider 处理）是功能与偏好层面的**主动决策**，
+其余差异（XyToken、关闭自动更新）是功能与偏好层面的**主动决策**，
 不是约束逼出来的——rebase 时的判断方式也因此不同。
 
 ## 上游重写过历史
@@ -72,6 +73,7 @@ done
 1.11.0 → 1.11.0（52 个提交）复核：**历史没有重写**，`git merge-base main upstream/main` 输出
 `6c28672`（正是上轮的基点）。
 1.11.0 → 1.12.0（3 个提交）复核：**仍然没有重写**，输出 `a42c777`（上轮的基点）。
+1.12.0 → 1.13.1（61 个提交）复核：**仍然没有重写**，输出 `3251208`（上轮的基点）。
 所以**下次先跑这一条判断**：有输出就走普通 rebase / `--onto` 都行，输出为空才需要去比对 tree。
 
 ## rebase 流程与验证基线
@@ -99,11 +101,20 @@ upstream 只碰了 `project.yml` 的版本号，与 fork 在那里的改动（`p
 `packages:` 段、`SU*` 键）落在不同区段；15 个提交全部干净落地，
 `git range-diff a42c777..backup/pre-rebase upstream/main..main` 全为 `=`，**0 行内容差异**。
 
-macOS 14.3 + Xcode 15.4 上的实测基线：**1575 个测试通过、5 个跳过、0 失败**（1.10.0 是 1387，
-1.11.0 首发 1531/4，1.11.0 同步后 1566/5，本轮 1575/5——upstream 的 `FullScreenAutoFoldTests` 与
-`SpinningArcTests` 是这 9 个的来处）。5 个跳过是 3 个 opt-in live check（Devin、LM Studio、Ollama）
-加 2 个玻璃测试（见第 8 节）。测试总数会随 upstream 增长，**要盯的是「0 failures」，不是具体数字**。
-1.12.0 这轮 `Scripts/install-app.sh` 装出 **1.12.0 (14)**、ad-hoc 签名，`/Applications` 那个进程正常起来。
+1.13.1 这轮（61 个提交）的命令：`git rebase --onto upstream/main 3251208 main`。**1 处冲突**——
+`Sources/Providers/ClaudeTokenRefresher.swift` 里 upstream 新加的 `arguments` 常量与文档正好落在
+fork 改成 `nonisolated` 的那个 `run` 声明上方（处理方式见「冲突热点」）。其余 15 个 fork 提交干净落地，
+`git range-diff 3251208..backup/pre-rebase-1.12.0 upstream/main..main` 只有那两处上下文差异。
+**本轮没有任何旧工具链 fallout**：upstream 的新代码在 Xcode 15.4 下直接编译通过——没有新增
+`glassEffect` / `pointerStyle` 调用点，也没有 5.10 的并发或类型推断问题，所以没有
+`Fix old-toolchain fallout` 那一笔提交。
+
+macOS 14.3 + Xcode 15.4 上的实测基线：**1603 个测试通过、5 个跳过、0 失败**（1.10.0 是 1387，
+1.11.0 首发 1531/4，1.11.0 同步后 1566/5，1.12.0 1575/5，本轮 1603/5——upstream 的
+`FullScreenAutoFoldTests` 与 `SpinningArcTests` 是这 9 个的来处）。5 个跳过是 3 个 opt-in live check
+（Devin、LM Studio、Ollama）加 2 个玻璃测试（见第 7 节）。测试总数会随 upstream 增长，**要盯的是
+「0 failures」，不是具体数字**。
+1.13.1 这轮 `Scripts/install-app.sh` 装出 **1.13.1 (16)**、ad-hoc 签名，`/Applications` 那个进程正常起来。
 
 ## 1. macOS 14.3 部署目标与 SDK shim
 
@@ -153,6 +164,10 @@ UsageResetCard / NotchRootView 换成 `compatGlassEffect(surfaceStyle, in: …)`
 1.12.0 复核：upstream 这轮没新增 `glassEffect` / `pointerStyle` 调用点（它改的是 `ProviderRing`
 的弧线绘制与 `NotchWindowController` 的空转优化），grep 仍干净，六个调用点、shim 和
 `#if swift(>=6.2)` 的两条边界原样落地，本轮没有旧工具链 fallout。
+1.13.1 复核：upstream 这轮同样没新增 `glassEffect` / `pointerStyle` 调用点，grep 仍干净；它碰了
+`Sources/Features/TooltipCard.swift` 与 `Sources/Notch/NotchRootView.swift`（都是
+`resetCredits` → `hasAvailableResetCredits` 那几行），与 fork 的玻璃调用点不在同一区段，自动合并干净。
+六个调用点、shim、`#if swift(>=6.2)` 的两条边界原样，本轮没有旧工具链 fallout。
 
 upstream 自己的 `.background { if let dim = surfaceStyle.glassDim { … } }`（暗色玻璃底下的那层 wash，
 只是个 `Color`）**留在调用点**，不搬进 shim。
@@ -193,6 +208,8 @@ Scripts/install-app.sh     # 退出码非 0 就是没起来
 原样共存；`Scripts/install-app.sh` 无 upstream 改动。本轮装出 1.11.0 (13)、ad-hoc，进程起来了。
 1.12.0 复核：upstream 这轮没碰 `Makefile`、`Scripts/install-app.sh`，上段格局原样；本轮装出
 1.12.0 (14)、ad-hoc，进程起来了。
+1.13.1 复核：`Makefile` 与 `Scripts/install-app.sh` 都没进 upstream 本轮的改动集，上段格局原样；
+本轮装出 1.13.1 (16)、ad-hoc，`/Applications` 那个进程起来了。
 
 ## 3. SwiftNIO 固定在 2.86.x
 
@@ -227,28 +244,10 @@ SwiftPM 会跳过自己读不了的版本，所以 `from: "2.86.0"` 会落在 2.
 `packages:` 段、也没碰 `Package.resolved`，fork 的 pin 原样落地。
 1.12.0 复核：同样只改版本号（`1.12.0` / `14`），`packages:` 段与 `Package.resolved` 都没动
 （`git diff --name-only a42c777 upstream/main -- Package.resolved` 为空），pin 仍是 swift-nio 2.86.2。
+1.13.1 复核：同样只改版本号（`1.13.1` / `16`），`packages:` 段与 `Package.resolved` 都没动
+（`git diff --name-only 3251208 upstream/main -- Package.resolved` 为空），pin 仍是 swift-nio 2.86.2。
 
-## 4. Claude provider 不交给 UsageStore
-
-**为什么存在**：`ClaudeOAuthProvider` 要读钥匙串里的 "Claude Code-credentials"。ad-hoc 签名下
-每次重建都算新 App，授权留不住 → 每次构建后都弹窗要密码。fork 的选择：**Claude 的 ring 不进 store**，
-但 provider 仍然构造并保留，供 token 刷新使用。
-
-**涉及文件**：`Sources/App/AppDelegate.swift`——`storeProviders` 过滤掉 `ClaudeOAuthProvider`；
-`preferences.reconcile(discoveredIDs:)` 仍传全集（否则它的设置会被当成已消失而清掉）。
-
-**rebase 时怎么判断**：upstream 重构过 provider 组装（`allProviders` + reconcile）。
-冲突时**保留 upstream 的结构**，只在交给 `UsageStore` 的那一处继续过滤。
-想恢复 Claude ring，就是去掉那行 filter。
-
-1.11.0 初轮复核：上游把 `allProviders` 又加长了一截（MiniMax、Kiro），filter 那一行仍在原位，
-`preferences.reconcile(discoveredIDs:)` 依旧拿全集。
-1.11.0 同步复核：`allProviders` 再长一截（Claude Desktop、日进度环等），结构未变——Claude 的 provider 仍
-在 store 之外构造并保留，只有交给 `UsageStore` 的那一处过滤。
-1.12.0 复核：upstream 这轮没碰 `AppDelegate.swift`；`storeProviders` 的 filter 仍在原处
-（`AppDelegate.swift:169`），`preferences.reconcile(discoveredIDs:)` 仍拿全集。
-
-## 5. 关闭 Sparkle 自动更新
+## 4. 关闭 Sparkle 自动更新
 
 **为什么存在**：这是本地定制构建，不能被 upstream 的 appcast 静默替换掉——即使 upstream
 自己也「允许用户阻止更新」，fork 的意图是**永不替换**。
@@ -266,8 +265,10 @@ SwiftPM 会跳过自己读不了的版本，所以 `from: "2.86.0"` 会落在 2.
 `SUFeedURL: ""` 及其注释也没被 upstream 动过。
 1.12.0 复核：三项键值仍未变——upstream 这轮只动 `project.yml` 的版本号，`SU*` 三行与
 `Sources/Info.plist` 都没进它的改动集。
+1.13.1 复核：三项键值依旧未变，`Sources/Info.plist` 也没进 upstream 的改动集；装出来的 1.13.1 里
+`SUEnableAutomaticChecks=false`、`SUFeedURL` 为空（实测回读 `/Applications` 那份 plist）。
 
-## 6. XyToken provider（fork 独有功能）
+## 5. XyToken provider（fork 独有功能）
 
 **为什么存在**：XyToken 的用量在网页会话里，refresh cookie 是 HttpOnly 且每次调用都轮换，
 所以「刷新 + 查询」必须在 App 自己的 WKWebView 里带着用户登录态跑。
@@ -292,8 +293,10 @@ SwiftPM 会跳过自己读不了的版本，所以 `from: "2.86.0"` 会落在 2.
 1.12.0 复核：upstream 这轮两个文件都没碰，三处注册原样；fork 又给 `XyTokenUsage` 的窗口补上了
 `duration`（从 limit 自己的 `period_value` / `period_unit` 推周期），token 提示条的 pace 行
 对 XyToken 也生效——这是本节功能范围内的本地演进，不是新的 divergence。
+1.13.1 复核：`Sites.swift` 依旧没进 upstream 的改动集；`AppDelegate` 的 provider 组装现在只差本节这
+三处注册——原先 Claude 的那处 filter 本轮已删除（见「已被 upstream 吸收的本地改动」）。
 
-## 7. 浏览器会话 provider 的登录提示修复
+## 6. 浏览器会话 provider 的登录提示修复
 
 **为什么存在**：`WebSessionProvider` 没有账号元数据。upstream 的设置页把「没有 account」
 当成「没登录」，于是在正常取到用量时仍显示登录提示和按钮（本地提交 `fc037d8`）。
@@ -315,8 +318,12 @@ fork 在 `ProviderSummary` 上区分：借用凭据的 provider 仍看 `account(
 1.12.0 复核仍是**上游没修**：grep 命中的 `needsSignIn` 全部来自 fork 自己——
 `ProviderAccount.needsSignIn`、`UsageStore.needsSignIn(_:account:)` 与 `SettingsView` 的两处读取；
 upstream 侧仍然只有 `needsSignInRenewal`。本地版本继续留着。
+1.13.1 复核仍是**上游没修**：upstream 这轮确实改了 `SettingsView.swift`（keychain 文案与 `Deny` 语义），
+但改的是另外几段；`grep -rn needsSignIn Sources/` 命中的仍是 fork 的三处，upstream 侧只有
+`needsSignInRenewal`。本地版本继续留着——它与 `Deny` 语义不冲突：`Deny` 让 `account()` 那条路走到
+`accessDenied`，本节处理的是「浏览器会话 provider 本来就取到了用量」的那条路。
 
-## 8. 玻璃样式测试在 macOS 26 以下跳过
+## 7. 玻璃样式测试在 macOS 26 以下跳过
 
 **为什么存在**：upstream 新增的 `NotchRenderTests.testTheFoldedPillIsTransparentInTheGlassStyle`
 假定 Liquid Glass 存在。macOS 14.3 上 `NotchSurfaceStyle` 会把 glass 样式解析成纯色，
@@ -336,8 +343,11 @@ upstream 侧仍然只有 `needsSignInRenewal`。本地版本继续留着。
 在 macOS 14 上表现为「跳过数从 4 变成 5」，不是本地要删的东西。
 1.12.0 复核：upstream 这轮没碰 `NotchRenderTests.swift`，本地那行继续留；实测跳过仍是 5 个，
 且原因与上段一一对上（3 个 opt-in live check + 上述两个玻璃测试）。
+1.13.1 复核：upstream 这轮碰了 `Tests/NotchRenderTests.swift`，但改的是 `StaleAfterMarginTests` 的
+`staleAfter` 余量（0.45 → 3，怕 CI 负载把断言压垮），没碰这个玻璃测试，本地那行继续留；实测跳过
+仍是 5 个。
 
-## 9. Kimi OAuth token 自主续期
+## 8. Kimi OAuth token 自主续期
 
 **为什么存在**：upstream 的 `KimiProvider` 只**读** `~/.kimi-code/credentials/kimi-code.json`，
 注释里假定「token 会被 CLI 在正常使用中续期」。这个假定对 Kimi 不成立：
@@ -407,7 +417,7 @@ API key，功能已在上游；本节是上游改成读 OAuth token **之后**�
 
    `the token endpoint answered 4xx` 或 `could not take the CLI's refresh lock` = Kimi 改了端点或
    CLI。先确认凭证文件没被动过（`stat` 的 mtime、`expires_at` 未变即安全），再决定跟不跟。
-3. 与第 4 节无关：Claude 是「跑 CLI 续期」，Kimi 是「自己发请求」。取舍在 token 寿命——Claude 的
+3. 与 Claude 的取舍无关（它已经回到 upstream 的形态，见「已被 upstream 吸收的本地改动」）：Claude 是
    刷新一次管八小时，Kimi 的只有十五分钟，后者每 13 分钟起一个 node 进程不划算，而 `kimi login`
    还会顺带重写 `config.toml`。
 
@@ -416,6 +426,9 @@ API key，功能已在上游；本节是上游改成读 OAuth token **之后**�
 只读凭证，`fetchSnapshot()` 里没有任何写回或 401 重取的动作。这一整笔提交继续留着。
 1.12.0 复核：**上游仍未修**。`KimiProvider.swift` / `KimiCredentials.swift` 都没进 upstream 本轮的
 改动集，信号 grep 仍只命中 fork 的那两个文件。
+1.13.1 复核：**上游仍未修**。`KimiProvider.swift` / `KimiCredentials.swift` 都没进 upstream 本轮的改动集
+（它只动了 `KimiActivityMonitor.swift`：`17287c5` 让工作目录匹配不再碰磁盘），信号 grep 仍只命中
+fork 的那两个文件。
 
 ## 冲突热点（真实踩到过的）
 
@@ -424,8 +437,9 @@ API key，功能已在上游；本节是上游改成读 OAuth token **之后**�
 | 整个仓库 | upstream 重写了全部 commit（hash 全变），没有共同祖先 | 见「上游重写过历史」：用 `--onto`，别用 `git rebase upstream/main` |
 | `ProviderGlyph.swift` / `GlyphOutline.swift` | git **自动合并成功**，但 enum 出现重复的 `case kimi` / `static let kimi` | 回退到 upstream 版本 |
 | `README.md` | 同上：表格行重复 | 回退到 upstream 版本 |
-| `AppDelegate.swift` | provider 组装被 upstream 重构 | 见第 4 节 |
-| `Sites.swift` | 两个相邻的 site 定义 | 见第 6 节 |
+| `AppDelegate.swift` | provider 组装被 upstream 重构（fork 在那里只剩 XyToken 的三处注册） | 保留 upstream 的结构，把 XyToken 加回去，见第 5 节 |
+| `Sites.swift` | 两个相邻的 site 定义 | 见第 5 节 |
+| `ClaudeTokenRefresher.swift` 的 `run` | upstream 把新的 `arguments` 常量与文档加在 fork 标了 `nonisolated` 的那个声明正上方 | 保留 upstream 的文档与常量，`run` 仍标 `nonisolated` |
 | `Info.plist` | `LSMinimumSystemVersion` 15.0 vs 14.3 | 保留 14.3 |
 | `NotchSurfaceStyle.swift` | upstream 新增的 `glass: Glass` 在旧 SDK 里连**类型**都不存在，`@available` 救不了 | 属性与比较它的测试整段进 `#if swift(>=6.2)`，见第 1 节 |
 | `MacOS26Shims.swift` 的签名 | shim 收 `Glass` 则调用点在旧 SDK 上必编译失败 | shim 只收 `NotchSurfaceStyle`，调用点不写 `Glass`，见第 1 节 |
@@ -461,6 +475,22 @@ API key，功能已在上游；本节是上游改成读 OAuth token **之后**�
 多了 plan 与 weekly 窗口。2026-09 的 rebase 里整个提交被丢弃。
 代价：upstream 没有 fork 那条 `case "kimi"` 的设置提示文案，走默认提示。
 
+**Claude provider 的 store filter**（`e263f7b` 的一部分，**2026-09 的 1.13.1 rebase 里删除**）：fork 曾把
+`ClaudeOAuthProvider` 排除在 `UsageStore` 之外，理由只有一个——ad-hoc 构建每次重建都换 cdhash，
+"Always Allow" 授权留不住，读 `Claude Code-credentials` 会每次启动弹密码。**这条理由已经不成立**：
+上一个基点 `3251208` 里就有 `7f036ab`，它让后台读取先关掉交互（`SecKeychainSetUserInteractionAllowed(false)`
+加 `kSecUseAuthenticationUIFail`），被拒绝后改走 `/usr/bin/security` 兜底——Apple 签名、在这些 item 的
+partition list 上，不需要授权；交互式读取只剩人点 "Allow access…" 的那一次（`ClaudeCredentials.askAgain`，
+只有设置页那个按钮会调它）。1.13.1 又把这条收严成 `Deny` 全源生效（`e4a4c77`）。
+
+本机实测（macOS 14.3、现编译的 ad-hoc 二进制、真钥匙串）：直接读返回 **-25293**（`errSecAuthFailed`）
+**0.03 秒、全程无弹窗**，`security` 兜底静默取回该 item（305 字节）。于是 filter 与两段注释一并删除
+（提交 `2da04bb`），`AppDelegate` 的 provider 组装与 upstream 完全一致。
+复现方法（不必改 app）：枚举 item 属性拿到 `kSecValuePersistentRef`（不需授权），再用上面那两个开关读
+它的 data；失败就 `security find-generic-password -a $USER -s "Claude Code-credentials" -w`。
+**只看 status 与字节数，不要打印 token。** 若哪天 upstream 把后台读取改回交互式、或去掉
+`/usr/bin/security` 兜底，先这样复现，再决定要不要把 filter 加回来。
+
 **判断方法**
 
 ```sh
@@ -477,6 +507,8 @@ git cherry -v upstream/main main
 1.11.0 初轮复核：**没有新增被吸收的条目**，`git cherry -v upstream/main main` 全部为 `+`。
 1.11.0 同步复核（52 个提交）：同样**没有**，12 个 fork 提交全为 `+`。
 1.12.0 复核（3 个提交）：`git cherry -v upstream/main main` 的 15 个提交仍全为 `+`，无新增条目。
+1.13.1 复核（61 个提交）：18 个 fork 提交仍全为 `+`。Claude filter 那条**不是** `cherry` 判出来的——patch
+不匹配，是人工复核时发现「上游把同一件事修好了」，正是本节存在的用途。
 历史重写不影响这个判断——`cherry` 比的是 patch 内容，不是 commit hash。
 
 ## 维护
