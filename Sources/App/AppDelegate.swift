@@ -142,12 +142,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // very first list it draws already excludes them. Constructed first,
             // it drew every provider from the archive and only dropped the
             // switched-off ones once the binding below delivered.
-            // This fork does not register ClaudeOAuthProvider: reading the
-            // "Claude Code-credentials" keychain item makes macOS raise an access
-            // prompt on every launch of an ad-hoc build — each rebuild changes the
-            // cdhash, so the grant cannot stick. To bring the Claude ring back,
-            // prefix the list below with
-            // `claudeProfiles.map { ClaudeOAuthProvider(profile: $0) }`.
             Log.usage.info("claude profiles: \(self.claudeProfiles.map(\.displayPath).joined(separator: ", "), privacy: .public)")
             Log.usage.info("codex profiles: \(self.codexProfiles.map(\.displayPath).joined(separator: ", "), privacy: .public)")
             Log.usage.info("antigravity profiles: \(self.antigravityProfiles.map(\.displayPath).joined(separator: ", "), privacy: .public)")
@@ -174,13 +168,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 + webProviders
                 + customProviders
             preferences.reconcile(discoveredIDs: allProviders.map(\.id))
-            // This fork keeps the Claude rings out of the store's list, for the
-            // reason given above; the providers are still built and held so the
-            // token refresher below keeps working.
-            let storeProviders = allProviders.filter { !($0 is ClaudeOAuthProvider) }
             let store = UsageStore(
-                providers: storeProviders,
-                disconnected: preferences.disconnectedIDs(among: storeProviders.map(\.id)),
+                providers: allProviders,
+                disconnected: preferences.disconnectedIDs(among: allProviders.map(\.id)),
                 // Passed at construction, not left to the sink below, for the
                 // same reason `disconnected` is: the sink delivers a run loop
                 // turn later, so without this every launch draws the built-in
