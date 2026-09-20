@@ -12,11 +12,11 @@ git rebase --onto upstream/main <fork 基点> main   # 注意 --onto，理由见
 这份文档的唯一目的：**下次 rebase 时不必重新推导「这条改动为什么存在、还需不需要」。**
 每节按同一格式写——为什么存在 / 涉及文件 / rebase 时怎么判断。
 
-> 写入时的基线：`upstream/main = bcd063c`——版本号 **1.13.1 (16)**，本轮 61 个提交（Windows 侧大改、
-> 乌克兰语本地化补全、Grok provider、keychain "Deny" 语义、Claude 续期进程收敛），本机
+> 写入时的基线：`upstream/main = ec1a7e3`——版本号 **1.15.0 (18)**，本轮 45 个提交（Settings 面板
+> 重做、QianwenAI provider、简繁中文本地化、Grok headless 扫描、"读数陈旧"判定修正），本机
 > **macOS 14.3 + Xcode 15.4（Swift 5.10）**。
 > 上游在 1.11.0 之前重写过全部历史（见「上游重写过历史」），旧 hash `abccf0e` 已不在 upstream；
-> **这一轮没有重写**：`git merge-base main upstream/main` 有值，就是上轮的基点 `3251208`。
+> **这一轮没有重写**：`git merge-base main upstream/main` 有值，就是上轮的基点 `bcd063c`。
 > 每次 rebase 后请更新这一行和文中已过期的结论（见末尾「维护」）。
 
 ## 目录
@@ -74,6 +74,7 @@ done
 `6c28672`（正是上轮的基点）。
 1.11.0 → 1.12.0（3 个提交）复核：**仍然没有重写**，输出 `a42c777`（上轮的基点）。
 1.12.0 → 1.13.1（61 个提交）复核：**仍然没有重写**，输出 `3251208`（上轮的基点）。
+1.13.1 → 1.15.0（45 个提交）复核：**仍然没有重写**，输出 `bcd063c`（上轮的基点）。
 所以**下次先跑这一条判断**：有输出就走普通 rebase / `--onto` 都行，输出为空才需要去比对 tree。
 
 ## rebase 流程与验证基线
@@ -109,12 +110,27 @@ fork 改成 `nonisolated` 的那个 `run` 声明上方（处理方式见「冲�
 `glassEffect` / `pointerStyle` 调用点，也没有 5.10 的并发或类型推断问题，所以没有
 `Fix old-toolchain fallout` 那一笔提交。
 
-macOS 14.3 + Xcode 15.4 上的实测基线：**1603 个测试通过、5 个跳过、0 失败**（1.10.0 是 1387，
-1.11.0 首发 1531/4，1.11.0 同步后 1566/5，1.12.0 1575/5，本轮 1603/5——upstream 的
+1.15.0 这轮（45 个提交）的命令：`git rebase --onto upstream/main bcd063c main`。**2 个文件冲突**：
+`Sources/App/AppDelegate.swift` 里 upstream 把新的 `qianwen` 加进 `webProviders` 与 `signInItems`，
+而 fork 的 `xytoken` 在同一个列表字面量里 → 两边都留，结果见第 5 节；`SettingsView.swift` 冲突了
+**两次**（最初那笔 SDK shim 提交与第三笔 `Fix old-toolchain fallout` 各一次），两处都是**已经失去
+对象**的玻璃替换——upstream 这一轮把玻璃侧栏换成扁平的 `SettingsPalette.sidebar`，并删掉了
+`sidebarToggle` / `collapsedSidebarToggle` / `SidebarIcon`，fork 在侧栏底与 orb 上的 `compatGlassEffect`
+无处可施，所以取 upstream、不再加回（见第 1 节与「已被 upstream 吸收的本地改动」）。
+其余 16 个 fork 提交干净落地；`Sources/Providers/Sites.swift` 里 upstream 的 `static let qianwen` 与
+fork 的 `static let xytoken` 自动合并成功、各一份，无重复定义（见第 5 节）。
+**本轮有 1 处旧工具链 fallout**：upstream 新增的 `GrokActivityMonitor.rescan()` 在两层嵌套的并发闭包里
+读捕获的 `weak self`，Swift 5.10 直接报错 → 单独一笔 `Fix old-toolchain fallout`（见「旧工具链编译
+错误的常见形态」）。
+
+macOS 14.3 + Xcode 15.4 上的实测基线：**1666 个测试通过、5 个跳过、0 失败**（1.10.0 是 1387，
+1.11.0 首发 1531/4，1.11.0 同步后 1566/5，1.12.0 1575/5，1.13.1 是 1603/5，本轮 1666/5——upstream 的
 `FullScreenAutoFoldTests` 与 `SpinningArcTests` 是这 9 个的来处）。5 个跳过是 3 个 opt-in live check
 （Devin、LM Studio、Ollama）加 2 个玻璃测试（见第 7 节）。测试总数会随 upstream 增长，**要盯的是
 「0 failures」，不是具体数字**。
 1.13.1 这轮 `Scripts/install-app.sh` 装出 **1.13.1 (16)**、ad-hoc 签名，`/Applications` 那个进程正常起来。
+1.15.0 这轮 `Scripts/install-app.sh` 装出 **1.15.0 (18)**、ad-hoc 签名，`/Applications` 那个进程正常起来；
+实测回读那份 plist：`LSMinimumSystemVersion` = 14.3、`SU*` 三项为 false / false / 空（见第 4 节）。
 
 ## 1. macOS 14.3 部署目标与 SDK shim
 
@@ -168,6 +184,13 @@ UsageResetCard / NotchRootView 换成 `compatGlassEffect(surfaceStyle, in: …)`
 `Sources/Features/TooltipCard.swift` 与 `Sources/Notch/NotchRootView.swift`（都是
 `resetCredits` → `hasAvailableResetCredits` 那几行），与 fork 的玻璃调用点不在同一区段，自动合并干净。
 六个调用点、shim、`#if swift(>=6.2)` 的两条边界原样，本轮没有旧工具链 fallout。
+1.15.0 复核：upstream 这轮同样没新增 `glassEffect` / `pointerStyle` 调用点，grep 仍干净（只剩注释行）。
+但它**删掉了两处玻璃表面**：侧栏从玻璃卡换成扁平的 `SettingsPalette.sidebar` + hairline，
+`collapsedSidebarToggle`（那个玻璃圆盘）连同 `sidebarToggle`、`SidebarIcon` 一起被删。fork 在这两处的
+`compatGlassEffect` 替换因此失去对象，rebase 时取 upstream、不再加回（SettingsView 为此冲突两次，
+见「rebase 流程与验证基线」）。`NotchSurfaceStyle.glass` 上游**仍未**自带门禁，fork 的
+`#if swift(>=6.2)` 与 shim 原样需要；五个 notch/feature 调用点与 `SettingsView` 的
+`glassBackground(in:)` 全部照旧，本轮没有新增 fallout。
 
 upstream 自己的 `.background { if let dim = surfaceStyle.glassDim { … } }`（暗色玻璃底下的那层 wash，
 只是个 `Color`）**留在调用点**，不搬进 shim。
@@ -210,6 +233,8 @@ Scripts/install-app.sh     # 退出码非 0 就是没起来
 1.12.0 (14)、ad-hoc，进程起来了。
 1.13.1 复核：`Makefile` 与 `Scripts/install-app.sh` 都没进 upstream 本轮的改动集，上段格局原样；
 本轮装出 1.13.1 (16)、ad-hoc，`/Applications` 那个进程起来了。
+1.15.0 复核：`Makefile` 与 `Scripts/install-app.sh` 都没进 upstream 本轮的改动集，上段格局原样；
+本轮装出 1.15.0 (18)、ad-hoc，`/Applications` 那个进程起来了。
 
 ## 3. SwiftNIO 固定在 2.86.x
 
@@ -246,6 +271,8 @@ SwiftPM 会跳过自己读不了的版本，所以 `from: "2.86.0"` 会落在 2.
 （`git diff --name-only a42c777 upstream/main -- Package.resolved` 为空），pin 仍是 swift-nio 2.86.2。
 1.13.1 复核：同样只改版本号（`1.13.1` / `16`），`packages:` 段与 `Package.resolved` 都没动
 （`git diff --name-only 3251208 upstream/main -- Package.resolved` 为空），pin 仍是 swift-nio 2.86.2。
+1.15.0 复核：同样只改版本号（`1.15.0` / `18`），`packages:` 段与 `Package.resolved` 都没动
+（`git diff --name-only bcd063c upstream/main -- Package.resolved` 为空），pin 仍是 swift-nio 2.86.2。
 
 ## 4. 关闭 Sparkle 自动更新
 
@@ -266,6 +293,9 @@ SwiftPM 会跳过自己读不了的版本，所以 `from: "2.86.0"` 会落在 2.
 1.12.0 复核：三项键值仍未变——upstream 这轮只动 `project.yml` 的版本号，`SU*` 三行与
 `Sources/Info.plist` 都没进它的改动集。
 1.13.1 复核：三项键值依旧未变，`Sources/Info.plist` 也没进 upstream 的改动集；装出来的 1.13.1 里
+`SUEnableAutomaticChecks=false`、`SUFeedURL` 为空（实测回读 `/Applications` 那份 plist）。
+1.15.0 复核：三项键值依旧未变（upstream 这轮**动了** `Sources/Info.plist`，但只往 `CFBundleLocalizations`
+里加了 `zh-Hant`，`SU*` 三行没进它的改动集）；装出来的 1.15.0 里 `LSMinimumSystemVersion` = 14.3、
 `SUEnableAutomaticChecks=false`、`SUFeedURL` 为空（实测回读 `/Applications` 那份 plist）。
 
 ## 5. XyToken provider（fork 独有功能）
@@ -295,6 +325,12 @@ SwiftPM 会跳过自己读不了的版本，所以 `from: "2.86.0"` 会落在 2.
 对 XyToken 也生效——这是本节功能范围内的本地演进，不是新的 divergence。
 1.13.1 复核：`Sites.swift` 依旧没进 upstream 的改动集；`AppDelegate` 的 provider 组装现在只差本节这
 三处注册——原先 Claude 的那处 filter 本轮已删除（见「已被 upstream 吸收的本地改动」）。
+1.15.0 复核：upstream 这轮**碰了**两个文件。`Sites.swift` 是纯追加（新增 `static let qianwen`，正好插在
+fork 的 `xytoken` 之前），自动合并成功、各一份；`AppDelegate` 则真冲突了——upstream 把 `qianwen` 加进
+`webProviders` 与 `signInItems`，与 fork 的 `xytoken` 落在同一个列表字面量里，两边都留，结果是
+`let webProviders = [deepSeek, qianwen, xytoken]` 与
+`fleet.signInItems = [deepSeek, miniMaxWeb, qianwen, xytoken]`（qianwen 的 `onAuthenticated` 那处
+upstream 单独加，与 fork 不相邻，自动合并干净）。
 
 ## 6. 浏览器会话 provider 的登录提示修复
 
@@ -322,6 +358,10 @@ upstream 侧仍然只有 `needsSignInRenewal`。本地版本继续留着。
 但改的是另外几段；`grep -rn needsSignIn Sources/` 命中的仍是 fork 的三处，upstream 侧只有
 `needsSignInRenewal`。本地版本继续留着——它与 `Deny` 语义不冲突：`Deny` 让 `account()` 那条路走到
 `accessDenied`，本节处理的是「浏览器会话 provider 本来就取到了用量」的那条路。
+1.15.0 复核仍是**上游没修**：`grep -rn needsSignIn Sources/` 命中的仍是 fork 的三处，upstream 侧只有
+`needsSignInRenewal`。upstream 这轮把 Settings 面板整体重做（`SettingsView.swift` +598 行），但 fork 的
+两处读取（`isSetUp`、`AccountRow` 的 `!provider.needsSignIn` 分支）都干净落地，说明它改的是别处的
+结构。本地版本继续留着。
 
 ## 7. 玻璃样式测试在 macOS 26 以下跳过
 
@@ -346,6 +386,9 @@ upstream 侧仍然只有 `needsSignInRenewal`。本地版本继续留着。
 1.13.1 复核：upstream 这轮碰了 `Tests/NotchRenderTests.swift`，但改的是 `StaleAfterMarginTests` 的
 `staleAfter` 余量（0.45 → 3，怕 CI 负载把断言压垮），没碰这个玻璃测试，本地那行继续留；实测跳过
 仍是 5 个。
+1.15.0 复核：upstream 这轮没碰 `NotchRenderTests.swift`，本地那行继续留；它碰的是
+`Tests/NotchLayoutTests.swift`（26 行），fork 在那里 `#if swift(>=6.2)` 里的 glass 比较测试自动合并干净。
+实测跳过仍是 5 个。
 
 ## 8. Kimi OAuth token 自主续期
 
@@ -429,6 +472,9 @@ API key，功能已在上游；本节是上游改成读 OAuth token **之后**�
 1.13.1 复核：**上游仍未修**。`KimiProvider.swift` / `KimiCredentials.swift` 都没进 upstream 本轮的改动集
 （它只动了 `KimiActivityMonitor.swift`：`17287c5` 让工作目录匹配不再碰磁盘），信号 grep 仍只命中
 fork 的那两个文件。
+1.15.0 复核：**上游仍未修**。`KimiProvider.swift` / `KimiCredentials.swift` 都没进 upstream 本轮的改动集
+（它只动了 `KimiActivityMonitor.swift`），信号 grep（`oauth/token` / `refresh_token`）仍只命中 fork 的
+那两个文件。
 
 ## 冲突热点（真实踩到过的）
 
@@ -437,8 +483,10 @@ fork 的那两个文件。
 | 整个仓库 | upstream 重写了全部 commit（hash 全变），没有共同祖先 | 见「上游重写过历史」：用 `--onto`，别用 `git rebase upstream/main` |
 | `ProviderGlyph.swift` / `GlyphOutline.swift` | git **自动合并成功**，但 enum 出现重复的 `case kimi` / `static let kimi` | 回退到 upstream 版本 |
 | `README.md` | 同上：表格行重复 | 回退到 upstream 版本 |
-| `AppDelegate.swift` | provider 组装被 upstream 重构（fork 在那里只剩 XyToken 的三处注册） | 保留 upstream 的结构，把 XyToken 加回去，见第 5 节 |
+| `AppDelegate.swift` | provider 组装被 upstream 重构；1.15.0 起 upstream 的 `qianwen` 与 fork 的 `xytoken` 落在**同一个列表字面量**里（`webProviders` / `signInItems`） | 保留 upstream 的结构与顺序，把 XyToken 加回去：`[deepSeek, qianwen, xytoken]`，见第 5 节 |
 | `Sites.swift` | 两个相邻的 site 定义 | 见第 5 节 |
+| `SettingsView.swift` 的侧栏底与 orb | upstream 1.15.0 把玻璃侧栏换成扁平 `SettingsPalette.sidebar`，并删掉 `sidebarToggle` / `collapsedSidebarToggle` / `SidebarIcon` | fork 那两处 `compatGlassEffect` 失去对象 → **取 upstream，不要加回**（见第 1 节） |
+| `project.yml` / `Info.plist` 的本地化列表 | upstream 往 `CFBundleLocalizations` 追加 `zh-Hant`，正好紧邻 fork 改的 `LSMinimumSystemVersion` | 各留一份：本地化列表取 upstream，`LSMinimumSystemVersion` 保持 14.3 |
 | `ClaudeTokenRefresher.swift` 的 `run` | upstream 把新的 `arguments` 常量与文档加在 fork 标了 `nonisolated` 的那个声明正上方 | 保留 upstream 的文档与常量，`run` 仍标 `nonisolated` |
 | `Info.plist` | `LSMinimumSystemVersion` 15.0 vs 14.3 | 保留 14.3 |
 | `NotchSurfaceStyle.swift` | upstream 新增的 `glass: Glass` 在旧 SDK 里连**类型**都不存在，`@available` 救不了 | 属性与比较它的测试整段进 `#if swift(>=6.2)`，见第 1 节 |
@@ -457,7 +505,9 @@ fork 的那两个文件。
 
 - **新 API**：macOS 26 才有的修饰符 → 走 `Sources/Compatibility/MacOS26Shims.swift`（见第 1 节）
 - **Swift 5.10 的并发限制**：不能在嵌套的并发闭包（`Task {}`、`MainActor.run {}`）里读取
-  捕获的 `weak self` 变量 → 在**外层**先绑定（见 `PhoneLinkServer`、`LMStudioMetrics`）
+  捕获的 `weak self` 变量 → 在**外层**先绑定（见 `PhoneLinkServer`、`LMStudioMetrics`；1.15.0 的
+  `GrokActivityMonitor.rescan` 是同一个形态，而且嵌套两层——`scanQueue.async` 里再套
+  `DispatchQueue.main.async` + `MainActor.assumeIsolated`）
 - **actor 隔离**：upstream 声明为 isolated 的方法，5.10 下需要 `nonisolated`（见 `ClaudeTokenRefresher.run`）
 - **测试里的可变捕获**：`var` 被并发闭包捕获 → 换成 `final class Box`（见 `ClaudeOAuthProviderTests`）
 - **类型推断差异**：字面量需要显式类型，例如 `[TimeInterval(18000), …]`（见 `OpenCodeUsageTests`）。
@@ -491,6 +541,19 @@ partition list 上，不需要授权；交互式读取只剩人点 "Allow access
 **只看 status 与字节数，不要打印 token。** 若哪天 upstream 把后台读取改回交互式、或去掉
 `/usr/bin/security` 兜底，先这样复现，再决定要不要把 filter 加回来。
 
+**侧栏与 orb 的玻璃替换**（**2026-09 的 1.15.0 rebase 里删除**）：这一条不是「上游修了同一件事」，而是
+**上游把对象删掉了**——1.15.0 把设置页侧栏从玻璃卡换成扁平的 `SettingsPalette.sidebar` + hairline（那一轮
+「dark, flat」的 Settings 重做），`collapsedSidebarToggle`（那个玻璃圆盘）连同 `sidebarToggle`、`SidebarIcon`
+一起被删。fork 原先在这两处做的 `compatGlassEffect` 替换因此无处可施，随两笔提交的 rebase 一并丢弃。
+代价：无。macOS 14.3 支持不受影响——侧栏现在是 upstream 自己的扁平配色，与玻璃无关；`SettingsView` 里
+仍需 shim 的只剩 `glassBackground(in:)` 与 `AccountRow` 的 `compatPointerStyle`。
+判据：
+
+```sh
+grep -n 'collapsedSidebarToggle\|sidebarToggle' upstream/main -- Sources/Settings/SettingsView.swift
+```
+
+上游侧不再有这两个名字时，本节描述的状态即成立。
 **判断方法**
 
 ```sh
@@ -510,6 +573,9 @@ git cherry -v upstream/main main
 1.13.1 复核（61 个提交）：18 个 fork 提交仍全为 `+`。Claude filter 那条**不是** `cherry` 判出来的——patch
 不匹配，是人工复核时发现「上游把同一件事修好了」，正是本节存在的用途。
 历史重写不影响这个判断——`cherry` 比的是 patch 内容，不是 commit hash。
+1.15.0 复核（45 个提交）：19 个 fork 提交（18 + 本轮那笔 `Fix old-toolchain fallout`）仍全为 `+`。新增的
+那一条（侧栏 / orb 的玻璃替换）同样**不是** `cherry` 判出来的——上游没有修同一件事，是把对象删掉了，
+见上面那一条。
 
 ## 维护
 
