@@ -150,8 +150,9 @@ macOS 14.3 + Xcode 15.4 上的实测基线：**1736 个测试通过、8 个跳�
 1.13.1 这轮 `Scripts/install-app.sh` 装出 **1.13.1 (16)**、ad-hoc 签名，`/Applications` 那个进程正常起来。
 1.15.0 这轮 `Scripts/install-app.sh` 装出 **1.15.0 (18)**、ad-hoc 签名，`/Applications` 那个进程正常起来；
 实测回读那份 plist：`LSMinimumSystemVersion` = 14.3、`SU*` 三项为 false / false / 空（见第 4 节）。
-1.16.0 这轮 `Scripts/install-app.sh` 装出 **1.16.0 (19)**、ad-hoc 签名（`codesign -dv` 的
-`Signature=adhoc`；脚本自己那行「signed …」印成了空的，见第 2 节），`/Applications` 那个进程正常起来；
+1.16.0 这轮 `Scripts/install-app.sh` 装出 **1.16.0 (19)**、ad-hoc 签名（脚本最后那行也如实印出
+`ad-hoc (no certificate in the keychain)`——它本轮修过一处 SIGPIPE 导致的空签名显示，见第 2 节），
+`/Applications` 那个进程正常起来；
 实测回读那份 plist：`LSMinimumSystemVersion` = 14.3、`SU*` 三项为 false / false / 空（见第 4 节）。
 
 ## 1. macOS 14.3 部署目标与 SDK shim
@@ -269,11 +270,13 @@ Scripts/install-app.sh     # 退出码非 0 就是没起来
 1.15.0 复核：`Makefile` 与 `Scripts/install-app.sh` 都没进 upstream 本轮的改动集，上段格局原样；
 本轮装出 1.15.0 (18)、ad-hoc，`/Applications` 那个进程起来了。
 1.16.0 复核：`Makefile` 与 `Scripts/install-app.sh` 都没进 upstream 本轮的改动集，上段格局原样；本轮装出
-1.16.0 (19)、ad-hoc，`/Applications` 那个进程起来了。**本轮新看到一条小毛病**：脚本最后那行
-「signed …」在 ad-hoc 下印成空的——`codesign -dv "$APP" 2>&1 | grep -q 'Signature=adhoc'` 在
-`set -o pipefail` 下，`grep -q` 一匹配就退出，`codesign` 吃到 SIGPIPE（141），整条管道因此判为失败，
-于是走 else 分支，而它 sed 的 `Authority=` 在 ad-hoc 签名里本来就不存在。签名本身没问题，
-`codesign -dv` 直接读仍是 `Signature=adhoc`（本次就是这么确认的）。
+1.16.0 (19)、ad-hoc，`/Applications` 那个进程起来了。**本轮发现并修掉了脚本自己的一处小毛病**：脚本最后
+那行「signed …」在 ad-hoc 下印成空的——`codesign -dv "$APP" 2>&1 | grep -q 'Signature=adhoc'` 在
+`set -o pipefail` 下，`grep -q` 一匹配就退出，`codesign` 吃到 SIGPIPE（**实测退出码 141**），整条管道
+因此判为失败，于是走 else 分支，而它 sed 的 `Authority=` 在 ad-hoc 签名里本来就不存在。现在先把
+`codesign -dv` 的输出读进一个变量再判断，第一行也在 `sed` 内部取（`| head -1` 有同一个坑）。签名本身
+一直是对的——`codesign -dv` 直接读仍是 `Signature=adhoc`——修完重跑脚本，那行现在印的是
+`signed ad-hoc (no certificate in the keychain)`。
 
 ## 3. SwiftNIO 固定在 2.86.x
 

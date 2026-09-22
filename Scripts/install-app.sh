@@ -59,10 +59,18 @@ fi
 VERSION=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$INFO")
 BUILD=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$INFO")
 
-if codesign -dv "$APP" 2>&1 | grep -q 'Signature=adhoc'; then
+# Read the signature once, into a variable. Piping it into `grep -q` is what
+# this used to do, and under `set -o pipefail` the `grep` exits on its first
+# match, `codesign` takes SIGPIPE (141), and the pipeline counts as failed —
+# so an ad-hoc build took the Developer ID branch and reported an empty
+# authority. The same trap waits in `| head -1` below, which is why the
+# first line is taken inside `sed` instead.
+SIGNING=$(codesign -dv "$APP" 2>&1 || true)
+
+if [[ "$SIGNING" == *"Signature=adhoc"* ]]; then
   SIGNATURE="ad-hoc (no certificate in the keychain)"
 else
-  SIGNATURE=$(codesign -dv "$APP" 2>&1 | sed -n 's/^Authority=//p' | head -1)
+  SIGNATURE=$(sed -n '/^Authority=/{s/^Authority=//;p;q;}' <<<"$SIGNING")
 fi
 
 # `make install` launched the app, so a dyld rejection has already happened by
