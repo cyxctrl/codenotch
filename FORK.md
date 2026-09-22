@@ -12,11 +12,12 @@ git rebase --onto upstream/main <fork 基点> main   # 注意 --onto，理由见
 这份文档的唯一目的：**下次 rebase 时不必重新推导「这条改动为什么存在、还需不需要」。**
 每节按同一格式写——为什么存在 / 涉及文件 / rebase 时怎么判断。
 
-> 写入时的基线：`upstream/main = ec1a7e3`——版本号 **1.15.0 (18)**，本轮 45 个提交（Settings 面板
-> 重做、QianwenAI provider、简繁中文本地化、Grok headless 扫描、"读数陈旧"判定修正），本机
-> **macOS 14.3 + Xcode 15.4（Swift 5.10）**。
+> 写入时的基线：`upstream/main = 784985e`——版本号 **1.16.0 (19)**，本轮 68 个提交（自定义端点
+> provider 与它的图标/预算/币种、Windows 端的自更新与多 Claude、Z.AI 账号、notch 折叠成胶囊与
+> 跨显示器拖拽、Liquid Glass tooltip 对比度、Antigravity 多账号配额、菜单栏限制显示改为 opt-in），
+> 本机 **macOS 14.3 + Xcode 15.4（Swift 5.10）**。
 > 上游在 1.11.0 之前重写过全部历史（见「上游重写过历史」），旧 hash `abccf0e` 已不在 upstream；
-> **这一轮没有重写**：`git merge-base main upstream/main` 有值，就是上轮的基点 `bcd063c`。
+> **这一轮没有重写**：`git merge-base main upstream/main` 有值，就是上轮的基点 `ec1a7e3`。
 > 每次 rebase 后请更新这一行和文中已过期的结论（见末尾「维护」）。
 
 ## 目录
@@ -75,6 +76,7 @@ done
 1.11.0 → 1.12.0（3 个提交）复核：**仍然没有重写**，输出 `a42c777`（上轮的基点）。
 1.12.0 → 1.13.1（61 个提交）复核：**仍然没有重写**，输出 `3251208`（上轮的基点）。
 1.13.1 → 1.15.0（45 个提交）复核：**仍然没有重写**，输出 `bcd063c`（上轮的基点）。
+1.15.0 → 1.16.0（68 个提交）复核：**仍然没有重写**，输出 `ec1a7e3`（上轮的基点）。
 所以**下次先跑这一条判断**：有输出就走普通 rebase / `--onto` 都行，输出为空才需要去比对 tree。
 
 ## rebase 流程与验证基线
@@ -123,13 +125,33 @@ fork 的 `static let xytoken` 自动合并成功、各一份，无重复定义�
 读捕获的 `weak self`，Swift 5.10 直接报错 → 单独一笔 `Fix old-toolchain fallout`（见「旧工具链编译
 错误的常见形态」）。
 
-macOS 14.3 + Xcode 15.4 上的实测基线：**1666 个测试通过、5 个跳过、0 失败**（1.10.0 是 1387，
-1.11.0 首发 1531/4，1.11.0 同步后 1566/5，1.12.0 1575/5，1.13.1 是 1603/5，本轮 1666/5——upstream 的
-`FullScreenAutoFoldTests` 与 `SpinningArcTests` 是这 9 个的来处）。5 个跳过是 3 个 opt-in live check
-（Devin、LM Studio、Ollama）加 2 个玻璃测试（见第 7 节）。测试总数会随 upstream 增长，**要盯的是
+1.16.0 这轮（68 个提交）的命令：`git rebase --onto upstream/main ec1a7e3 main`。**3 个文件冲突、两次停**：
+`UsageStore.swift` 里 upstream 给 `ProviderSummary` 加了 `customIconFilename:`，正好落在 fork 那笔
+「读一次 `account()` 并传 `needsSignIn:`」的同一段 → 两边都留（见第 6 节）；`TooltipCard.swift` 与
+`UsageResetCard.swift` 里 upstream 改了 tooltip 玻璃的**内容**——尾偏移换成 `clampedTailOffset`、
+`surfaceStyle.glassDim` 换成 `TooltipGlassContrast.dim(...)`（本轮「Refine/Improve Liquid Glass tooltip
+contrast」）——而 fork 在同一行把 `#available(macOS 26)` + `glassEffect` 换成了 shim → 取 upstream 的
+新内容、只把调用换成 `compatGlassEffect`（见第 1 节）。其余 18 个 fork 提交干净落地；
+`AppDelegate.swift` / `SettingsView.swift` / `ProviderAccount.swift` / `NotchRootView.swift` /
+`Tests/NotchRenderTests.swift` / `project.yml` 都是自动合并成功（第 5 节的 XyToken 注册照旧各一份）。
+`git range-diff ec1a7e3..backup/pre-rebase-1.15.0 upstream/main..main` 只有 `7526460` 那笔显示内容差异，
+逐行看下来全是 upstream 新增行的上下文（`antigravity profiles` 日志行、`+ customProviders`），语义未变。
+**本轮有 2 处旧工具链 fallout**：upstream 把 provider 组装改成一个跨十几种类型的 `+` 链，5.10 的类型
+检查器在 `AppDelegate` 上超时；upstream 新增的 3 个 Liquid Glass 对比度测试在 macOS 26 以下没有可测的
+玻璃。两处合为一笔 `Fix old-toolchain fallout`（见「旧工具链编译错误的常见形态」与第 7 节）。
+
+macOS 14.3 + Xcode 15.4 上的实测基线：**1736 个测试通过、8 个跳过、0 失败**（1.10.0 是 1387，
+1.11.0 首发 1531/4，1.11.0 同步后 1566/5，1.12.0 1575/5，1.13.1 是 1603/5，1.15.0 是 1666/5，
+本轮 1736/8）。
+8 个跳过是 3 个 opt-in live check（Devin、LM Studio、Ollama）加 5 个玻璃测试（`NotchRenderTests`
+2 个 + `UsageBandTests` 的 `PaletteAppearanceTests` 3 个，见第 7 节）。测试总数会随 upstream 增长
+——整文件新增（`FullScreenAutoFoldTests`、`SpinningArcTests` 这类）是常见来源——**要盯的是
 「0 failures」，不是具体数字**。
 1.13.1 这轮 `Scripts/install-app.sh` 装出 **1.13.1 (16)**、ad-hoc 签名，`/Applications` 那个进程正常起来。
 1.15.0 这轮 `Scripts/install-app.sh` 装出 **1.15.0 (18)**、ad-hoc 签名，`/Applications` 那个进程正常起来；
+实测回读那份 plist：`LSMinimumSystemVersion` = 14.3、`SU*` 三项为 false / false / 空（见第 4 节）。
+1.16.0 这轮 `Scripts/install-app.sh` 装出 **1.16.0 (19)**、ad-hoc 签名（`codesign -dv` 的
+`Signature=adhoc`；脚本自己那行「signed …」印成了空的，见第 2 节），`/Applications` 那个进程正常起来；
 实测回读那份 plist：`LSMinimumSystemVersion` = 14.3、`SU*` 三项为 false / false / 空（见第 4 节）。
 
 ## 1. macOS 14.3 部署目标与 SDK shim
@@ -191,6 +213,17 @@ UsageResetCard / NotchRootView 换成 `compatGlassEffect(surfaceStyle, in: …)`
 见「rebase 流程与验证基线」）。`NotchSurfaceStyle.glass` 上游**仍未**自带门禁，fork 的
 `#if swift(>=6.2)` 与 shim 原样需要；五个 notch/feature 调用点与 `SettingsView` 的
 `glassBackground(in:)` 全部照旧，本轮没有新增 fallout。
+1.16.0 复核：upstream 这轮新增了**一处** `glassEffect` 调用点——`TooltipCard` 里 tooltip 的那层
+玻璃（`UsageResetCard` 是同一处的旧行改写），grep 仍只剩注释，说明 fork 把它换成了 `compatGlassEffect`。
+它同时改了那两处玻璃的**内容**：尾偏移从 `tailOffset` 换成 `clampedTailOffset`（`Refine Liquid Glass
+tooltip contrast` 那轮的尾钳制），铺在玻璃下面的 wash 从 `surfaceStyle.glassDim` 换成
+`TooltipGlassContrast.dim(surfaceStyle:colorScheme:reduceTransparency:)`（`.glass` 在深色下现在也要一层
+可读性 wash，不再只有 `.darkGlass`）。两处都在冲突里按「取 upstream 的新内容、只换调用」处理。
+**于是「wash 留在调用点」这句话要分开看**：notch 面板（`NotchRootView` 2 处）与两个 orb
+（`MoveHandle` / `SettingsHandle` 各 2 处）仍是 `surfaceStyle.glassDim`；两个 tooltip 改用
+`TooltipGlassContrast.dim(...)`。两者都不进 shim——shim 只管 `glassEffect` 本身。
+`NotchSurfaceStyle.glass` 上游仍未自带门禁，fork 的 `#if swift(>=6.2)` 与 shim 原样需要；
+六个 notch/feature 调用点与 `SettingsView` 的 `glassBackground(in:)` 全部照旧。
 
 upstream 自己的 `.background { if let dim = surfaceStyle.glassDim { … } }`（暗色玻璃底下的那层 wash，
 只是个 `Color`）**留在调用点**，不搬进 shim。
@@ -235,6 +268,12 @@ Scripts/install-app.sh     # 退出码非 0 就是没起来
 本轮装出 1.13.1 (16)、ad-hoc，`/Applications` 那个进程起来了。
 1.15.0 复核：`Makefile` 与 `Scripts/install-app.sh` 都没进 upstream 本轮的改动集，上段格局原样；
 本轮装出 1.15.0 (18)、ad-hoc，`/Applications` 那个进程起来了。
+1.16.0 复核：`Makefile` 与 `Scripts/install-app.sh` 都没进 upstream 本轮的改动集，上段格局原样；本轮装出
+1.16.0 (19)、ad-hoc，`/Applications` 那个进程起来了。**本轮新看到一条小毛病**：脚本最后那行
+「signed …」在 ad-hoc 下印成空的——`codesign -dv "$APP" 2>&1 | grep -q 'Signature=adhoc'` 在
+`set -o pipefail` 下，`grep -q` 一匹配就退出，`codesign` 吃到 SIGPIPE（141），整条管道因此判为失败，
+于是走 else 分支，而它 sed 的 `Authority=` 在 ad-hoc 签名里本来就不存在。签名本身没问题，
+`codesign -dv` 直接读仍是 `Signature=adhoc`（本次就是这么确认的）。
 
 ## 3. SwiftNIO 固定在 2.86.x
 
@@ -273,6 +312,8 @@ SwiftPM 会跳过自己读不了的版本，所以 `from: "2.86.0"` 会落在 2.
 （`git diff --name-only 3251208 upstream/main -- Package.resolved` 为空），pin 仍是 swift-nio 2.86.2。
 1.15.0 复核：同样只改版本号（`1.15.0` / `18`），`packages:` 段与 `Package.resolved` 都没动
 （`git diff --name-only bcd063c upstream/main -- Package.resolved` 为空），pin 仍是 swift-nio 2.86.2。
+1.16.0 复核：同样只改版本号（`1.16.0` / `19`），`packages:` 段与 `Package.resolved` 都没动
+（`git diff --name-only ec1a7e3 upstream/main -- Package.resolved` 为空），pin 仍是 swift-nio 2.86.2。
 
 ## 4. 关闭 Sparkle 自动更新
 
@@ -297,6 +338,9 @@ SwiftPM 会跳过自己读不了的版本，所以 `from: "2.86.0"` 会落在 2.
 1.15.0 复核：三项键值依旧未变（upstream 这轮**动了** `Sources/Info.plist`，但只往 `CFBundleLocalizations`
 里加了 `zh-Hant`，`SU*` 三行没进它的改动集）；装出来的 1.15.0 里 `LSMinimumSystemVersion` = 14.3、
 `SUEnableAutomaticChecks=false`、`SUFeedURL` 为空（实测回读 `/Applications` 那份 plist）。
+1.16.0 复核：三项键值依旧未变（`Sources/Info.plist` 本轮**完全没进** upstream 的改动集）；装出来的 1.16.0 里
+`LSMinimumSystemVersion` = 14.3、`SUFeedURL` 为空、`SUEnableAutomaticChecks` / `SUAutomaticallyUpdate`
+均为 false（实测回读 `/Applications` 那份 plist）。
 
 ## 5. XyToken provider（fork 独有功能）
 
@@ -331,6 +375,11 @@ fork 的 `xytoken` 之前），自动合并成功、各一份；`AppDelegate` �
 `let webProviders = [deepSeek, qianwen, xytoken]` 与
 `fleet.signInItems = [deepSeek, miniMaxWeb, qianwen, xytoken]`（qianwen 的 `onAuthenticated` 那处
 upstream 单独加，与 fork 不相邻，自动合并干净）。
+1.16.0 复核：两个文件都**没进** upstream 本轮的改动集，三处注册原样（`let webProviders =
+[deepSeek, qianwen, xytoken]`、`fleet.signInItems = [deepSeek, miniMaxWeb, qianwen, xytoken]`、
+`Sites.swift` 的 `static let xytoken`）。真正的变动在别处：upstream 给 provider 组装加了
+`customProviders`（自定义端点，见 `preferences.customEndpoints`），fork 的注册与它互不相邻，
+自动合并干净。这也是本轮那处类型检查超时的由来——链上又多了一项（见「旧工具链编译错误的常见形态」）。
 
 ## 6. 浏览器会话 provider 的登录提示修复
 
@@ -362,6 +411,12 @@ upstream 侧仍然只有 `needsSignInRenewal`。本地版本继续留着。
 `needsSignInRenewal`。upstream 这轮把 Settings 面板整体重做（`SettingsView.swift` +598 行），但 fork 的
 两处读取（`isSetUp`、`AccountRow` 的 `!provider.needsSignIn` 分支）都干净落地，说明它改的是别处的
 结构。本地版本继续留着。
+1.16.0 复核仍是**上游没修**：`grep -rn needsSignIn Sources/` 命中的仍是 fork 的三处，upstream 侧只有
+`needsSignInRenewal`。但本轮 `UsageStore.swift` **真冲突了**——upstream 给 `ProviderSummary` 加了
+`customIconFilename:`（自定义端点的图标），正好落在 fork 那段「读一次 `account()` 并传 `needsSignIn:`」
+的中间。处理：取 upstream 的新参数与 fork 的共享 `account` 变量、保留 `needsSignIn:` 那一行，参数顺序按
+`ProviderSummary` 的声明（`glyph` → `customIconFilename` → `account` → …）。`ProviderAccount.swift` 与
+`SettingsView.swift` 自动合并干净，两处读取（`isSetUp`、`AccountRow` 的 `!provider.needsSignIn` 分支）原样。
 
 ## 7. 玻璃样式测试在 macOS 26 以下跳过
 
@@ -369,7 +424,17 @@ upstream 侧仍然只有 `needsSignInRenewal`。本地版本继续留着。
 假定 Liquid Glass 存在。macOS 14.3 上 `NotchSurfaceStyle` 会把 glass 样式解析成纯色，
 该断言不可能成立——纯色下 pill 本来就是不透明的，旁边的兄弟测试钉的正是这个行为。
 
-**涉及文件**：`Tests/NotchRenderTests.swift`（`XCTSkipUnless(NotchSurfaceStyle.glassAvailable, …)`）
+**涉及文件**：`Tests/NotchRenderTests.swift`、`Tests/UsageBandTests.swift`（两处都是
+`XCTSkipUnless(NotchSurfaceStyle.glassAvailable, …)`）。
+
+1.16.0 起还有**第二类**：`Tests/UsageBandTests.swift` 的 `PaletteAppearanceTests` 里三个比较
+Liquid Glass 对比度的测试（`testOnlyDarkStandardLiquidGlassGetsReadableSecondaryInk`、
+`testOnlyDarkSystemLiquidGlassGetsTheReadableDim`、`testReadableLiquidGlassDimStaysDarkAndTranslucent`）。
+它们断言 `TooltipGlassContrast` 在 `.glass` / `.darkGlass` 下的取值，而 macOS 26 以下
+`NotchSurfaceStyle.effective` 把这两个风格都解析成 `.solid` → `needsReadableDim` 只能是 false、
+`dim(...)` 只能是 nil。upstream 这几个测试本来是 `skip`，本轮 `de5fbde` 改成直接断言（它的环境是
+macOS 26），所以在旧系统上必然红。**这三个门禁不是 fork 的功能改动**，删掉的条件同下：upstream 自己
+给它们加 `glassAvailable` 门禁（或改成 `#available` 自跳过）时，本地这三行就该删。
 
 **rebase 时怎么判断**：这是**测试适配，不是决策**。upstream 若自己加了 `glassAvailable` 门禁，
 本地这行就该删。
@@ -389,6 +454,10 @@ upstream 侧仍然只有 `needsSignInRenewal`。本地版本继续留着。
 1.15.0 复核：upstream 这轮没碰 `NotchRenderTests.swift`，本地那行继续留；它碰的是
 `Tests/NotchLayoutTests.swift`（26 行），fork 在那里 `#if swift(>=6.2)` 里的 glass 比较测试自动合并干净。
 实测跳过仍是 5 个。
+1.16.0 复核：upstream 这轮**碰了** `Tests/NotchRenderTests.swift`（+42/-18），但改的是 `testHidingClearsBothHolds`
+那几个（`Hiding` 相关的两个 hold），fork 那行 `XCTSkipUnless` 自动合并干净、继续留。新出现的是上面第二类：
+`Tests/UsageBandTests.swift` 本轮被 upstream 加了三个玻璃对比度测试，三个都加了门禁，实测跳过从 5 变成 8
+（3 个 opt-in live check + `NotchRenderTests` 2 个 + `PaletteAppearanceTests` 3 个）。
 
 ## 8. Kimi OAuth token 自主续期
 
@@ -475,6 +544,9 @@ fork 的那两个文件。
 1.15.0 复核：**上游仍未修**。`KimiProvider.swift` / `KimiCredentials.swift` 都没进 upstream 本轮的改动集
 （它只动了 `KimiActivityMonitor.swift`），信号 grep（`oauth/token` / `refresh_token`）仍只命中 fork 的
 那两个文件。
+1.16.0 复核：**上游仍未修**。upstream 本轮**一个 Kimi 文件都没碰**（`git diff --name-only ec1a7e3
+upstream/main | grep -i kimi` 为空），信号 grep 仍只命中 fork 的 `KimiTokenRefresher.swift` 与
+`KimiCredentials.swift`。这一整笔提交继续留着。
 
 ## 冲突热点（真实踩到过的）
 
@@ -485,6 +557,8 @@ fork 的那两个文件。
 | `README.md` | 同上：表格行重复 | 回退到 upstream 版本 |
 | `AppDelegate.swift` | provider 组装被 upstream 重构；1.15.0 起 upstream 的 `qianwen` 与 fork 的 `xytoken` 落在**同一个列表字面量**里（`webProviders` / `signInItems`） | 保留 upstream 的结构与顺序，把 XyToken 加回去：`[deepSeek, qianwen, xytoken]`，见第 5 节 |
 | `Sites.swift` | 两个相邻的 site 定义 | 见第 5 节 |
+| `UsageStore.swift` 的 `ProviderSummary` 构造 | upstream 1.16.0 加了 `customIconFilename:`，正好落在 fork「读一次 `account()` + `needsSignIn:`」那一段中间 | 两边都留：upstream 的新参数 + fork 的共享 `account` 变量与 `needsSignIn:`，顺序按 `ProviderSummary` 声明，见第 6 节 |
+| `TooltipCard.swift` / `UsageResetCard.swift` 的 tooltip 玻璃 | upstream 1.16.0 改了**同一行**的内容（`clampedTailOffset`、`TooltipGlassContrast.dim(...)`），而 fork 把这一行换成了 shim | 取 upstream 的新内容，只把 `glassEffect` 换成 `compatGlassEffect(surfaceStyle, …)`，见第 1 节 |
 | `SettingsView.swift` 的侧栏底与 orb | upstream 1.15.0 把玻璃侧栏换成扁平 `SettingsPalette.sidebar`，并删掉 `sidebarToggle` / `collapsedSidebarToggle` / `SidebarIcon` | fork 那两处 `compatGlassEffect` 失去对象 → **取 upstream，不要加回**（见第 1 节） |
 | `project.yml` / `Info.plist` 的本地化列表 | upstream 往 `CFBundleLocalizations` 追加 `zh-Hant`，正好紧邻 fork 改的 `LSMinimumSystemVersion` | 各留一份：本地化列表取 upstream，`LSMinimumSystemVersion` 保持 14.3 |
 | `ClaudeTokenRefresher.swift` 的 `run` | upstream 把新的 `arguments` 常量与文档加在 fork 标了 `nonisolated` 的那个声明正上方 | 保留 upstream 的文档与常量，`run` 仍标 `nonisolated` |
@@ -513,6 +587,13 @@ fork 的那两个文件。
 - **类型推断差异**：字面量需要显式类型，例如 `[TimeInterval(18000), …]`（见 `OpenCodeUsageTests`）。
   5.10 不会把整数算术折叠成 `Double`，所以 `[5 * 3600, 7 * 86400]` 匹配不上 `[TimeInterval?]`，
   要写成 `[TimeInterval(5 * 3600), TimeInterval(7 * 86400)]`（1.11.0 的 `Tests/MiniMaxUsageTests.swift`）。
+- **一整个表达式的类型检查超时**：`error: the compiler is unable to type-check this expression in
+  reasonable time`。1.16.0 的 `AppDelegate` 就是这样——upstream 把 provider 组装写成一个跨十几种
+  类型的 `+` 链（`[ClaudeOAuthProvider] + [CursorLocalProvider] + … + [WebSessionProvider] +
+  `[UsageProvider]`），Swift 6 解得出、5.10 解不动。**拆成一句一个 `+=`**，并给每个 `map` 的元素显式
+  写 `as UsageProvider`（不写的话 `map` 的结果是具体类型，`+=` 的 `Element == UsageProvider` 匹配不上，
+  字面量可以靠上下文推断、`map` 不行）。给链首项标注类型、把长字面量单独提出来，都试过——不够，
+  必须拆成独立语句。判据：`make build` 报这一条，且报的是 `let xxx: [SomeProtocol] = …` 这种长表达式。
 - **类型不存在，而不是 API 不存在**：`@available` 门禁不了「返回类型不在这个 SDK 里」的声明——
   `NotchSurfaceStyle.glass` 返回 `Glass`，只能整段 `#if swift(>=6.2)`（见第 1 节）。同理，测试里
   比较这个值的断言要一起进 `#if`，否则**测试目标**编译失败——`make build` 仍是绿的，只有
@@ -576,6 +657,10 @@ git cherry -v upstream/main main
 1.15.0 复核（45 个提交）：19 个 fork 提交（18 + 本轮那笔 `Fix old-toolchain fallout`）仍全为 `+`。新增的
 那一条（侧栏 / orb 的玻璃替换）同样**不是** `cherry` 判出来的——上游没有修同一件事，是把对象删掉了，
 见上面那一条。
+1.16.0 复核（68 个提交）：21 个 fork 提交（19 + 1.15.0 那笔 fallout + 本轮那笔 fallout）仍全为 `+`，
+无新增条目。本轮 upstream 碰了不少 fork 也改过的地方（`UsageStore` 的 `ProviderSummary` 构造、两个
+tooltip 的玻璃行、provider 组装），但没有一件事是「把 fork 的改动做了」——三处都是**不同内容落在同一行**，
+所以仍然要人工看，不能只看 `cherry`。
 
 ## 维护
 
