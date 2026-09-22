@@ -150,23 +150,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let customProviders: [UsageProvider] = preferences.customEndpoints.filter(\.isEnabled).map { endpoint in
                 CustomEndpointProvider(endpoint: endpoint)
             }
-            let allProviders: [UsageProvider] = claudeProviders
-                + [CursorLocalProvider()]
-                + codexProfiles.map { CodexLocalProvider(profile: $0) }
-                + antigravityProfiles.map { AntigravityProvider(profile: $0) }
-                + [GLMProvider(), MiniMaxProvider(web: miniMaxWeb), GrokLocalProvider(), DevinLocalProvider(), OpenCodeProvider(),
-                   CommandCodeProvider(), GitHubCopilotProvider(), KimiProvider(), KiroProvider(),
-                   OllamaLocalProvider(endpoint: URL(string: preferences.ollamaEndpoint)!),
-                   LMStudioLocalProvider(endpoint: URL(string: preferences.lmstudioEndpoint)!),
-                   OllamaProvider(),
-                   // A closure, not the value: the provider is an actor and
-                   // re-reads the budget on every fetch, so a ceiling typed
-                   // into Settings applies without a restart.
-                   GeminiAPIProvider(budget: {
-                       Preferences.storedGeminiAPIMonthlyTokenBudget()
-                   })]
-                + webProviders
-                + customProviders
+            // One `+=` per line, and an explicit element type on every `map`,
+            // rather than upstream's single `+` chain: below Swift 6 that chain is
+            // one constraint system spanning every provider type here, and the 5.10
+            // type-checker gives up on it — "unable to type-check this expression
+            // in reasonable time". Same providers, same order.
+            var allProviders: [UsageProvider] = claudeProviders.map { $0 as UsageProvider }
+            allProviders += [CursorLocalProvider()]
+            allProviders += codexProfiles.map { CodexLocalProvider(profile: $0) as UsageProvider }
+            allProviders += antigravityProfiles.map { AntigravityProvider(profile: $0) as UsageProvider }
+            allProviders += [GLMProvider(), MiniMaxProvider(web: miniMaxWeb), GrokLocalProvider(), DevinLocalProvider(), OpenCodeProvider(),
+                             CommandCodeProvider(), GitHubCopilotProvider(), KimiProvider(), KiroProvider(),
+                             OllamaLocalProvider(endpoint: URL(string: preferences.ollamaEndpoint)!),
+                             LMStudioLocalProvider(endpoint: URL(string: preferences.lmstudioEndpoint)!),
+                             OllamaProvider(),
+                             // A closure, not the value: the provider is an actor and
+                             // re-reads the budget on every fetch, so a ceiling typed
+                             // into Settings applies without a restart.
+                             GeminiAPIProvider(budget: {
+                                 Preferences.storedGeminiAPIMonthlyTokenBudget()
+                             })]
+            allProviders += webProviders.map { $0 as UsageProvider }
+            allProviders += customProviders
             preferences.reconcile(discoveredIDs: allProviders.map(\.id))
             let store = UsageStore(
                 providers: allProviders,
