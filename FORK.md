@@ -399,9 +399,37 @@ SwiftPM 会跳过自己读不了的版本，所以 `from: "2.86.0"` 会落在 2.
 
 **涉及文件**
 
-- `Sources/Providers/Sites.swift`：`static let xytoken`（紧挨着 upstream 的 `static let deepSeek`）
+- `Sources/Providers/Sites.swift`：`static let xytoken`（紧挨着 upstream 的 `static let deepSeek`），
+  并声明窗口角色 `headlineID: "day:1"` / `weeklyID: "week:1"`（`rule_key` 里 `|` 之前的稳定半段，
+  见下面的「外观配置同步规则」）
 - `Sources/Providers/XyTokenUsage.swift`、`Tests/XyTokenUsageTests.swift`
 - `Sources/App/AppDelegate.swift`：`webProviders` 里注册
+
+**外观配置同步规则（每次 rebase 都要顺带看一眼）**：设置-外观里有一批配置**不是**对所有 provider
+自动生效的——它们要么按 id 解析 provider 声明的窗口角色（`ProviderSnapshot.headlineID` / `weeklyID`），
+要么要窗口自带 `duration` / `resetsAt`。xytoken 的窗口 id 是 `rule_key` 里 `|` **之前**的稳定半段
+（`day:1` / `week:1`；`|` 之后是重置排程，会随重置日变——见 `XyTokenUsage.windowID`），所以
+upstream 新增或改动这类配置时，**回来检查 xytoken 是否也要同步声明**：
+
+- 依赖 `weeklyID` 的（xytoken 声明它之前一律**静默不生效**）：「每周圆环」（内/外，`preferences.weeklyRing`）、
+  「虚线每周圆环」、「圆环读数含每周」、「每周限额作为主圆环」，以及 `UsageLimitWatcher` 的周限额提醒
+  （开关在设置-通知里：`announceWeeklyLimitReached`）；
+- **菜单栏「显示每周限额」对 xytoken 结构性不适用**：`StatusItemSummary.canSummarise` 要求 5 小时窗口
+  或 Claude/Codex（`isFiveHourFamily`），xytoken 的 day / week 都不满足——声明 `weeklyID` 只是前向兼容，
+  哪天菜单栏放宽这条限制它才会自动可用；
+- 依赖窗口字段的：`showUsagePace`（要 `duration`，1.12.0 已补）、`resetTimeFormat`（要 `resetsAt`，
+  `window_end` 已映射）；
+- 对所有 provider 通用、不必同步：每个圆环下方百分比（`showsNotchReadings`）、颜色过渡 / 观察限额 /
+  临界限额，以及 notch 本体外观（可见性 / 边缘 / 尺寸 / 折叠 / 显示器 / 表面 / 移动手柄）；
+- provider 专属、与 xytoken 无关：Claude 日节奏环（`claudeDailyPaceRing`）、Spark 和代码评审
+  （`showCodexExtraLimits`）。
+
+判据：**先看新配置的消费点读什么**——若读的是 provider 声明的数据（窗口角色 id、`duration`、
+`resetsAt`、`plan`），就回到 `Sites.swift` 的 `static let xytoken` 与 `XyTokenUsage` 看要不要补，
+并在 `Tests/XyTokenUsageTests.testSiteWindowRolesResolveToTheParsedWindows` 里钉住（该测试断言 site
+声明的 id 能在 parser 实际产出的窗口 id 里解析到——它比的是 site 声明与 fixture，所以站台单独改
+`rule_key` 不会让它红：按「维护」第 8 条先拿线上真实响应更新 fixture，它就会先红，不必等 App 里周环
+悄悄消失才发现）。
 
 **rebase 时怎么判断**：upstream 也在加同类 provider——DeepSeek、以及 1.11.0 的 MiniMax、Kiro 都是
 `WebSessionProvider`。冲突时**两边都留**。1.11.0 那轮 `AppDelegate` 的合并结果是三份：
@@ -439,6 +467,24 @@ upstream 单独加，与 fork 不相邻，自动合并干净）。
 `UsageProvider` actor、各有自己的 `signInRoute`（Amp / Apify / Kilo 都是 `.guidance`——在终端里跑各自的登录命令，
 **没有**走本轮新的 `.command`），**不是** `WebSessionProvider`，
 所以 `webProviders` 这个列表不需要再加东西。
+
+本节本地演进（**非 rebase**）：给 `static let xytoken` 补上窗口角色 `headlineID: "day:1"` /
+`weeklyID: "week:1"`，使外观面板里依赖 `weeklyID` 的那组配置（每周圆环、虚线每周圆环、圆环读数含每周、
+每周限额作为主圆环、周限额提醒）对 XyToken 生效——此前它们对它静默不生效。菜单栏那条不算：它对 xytoken
+结构性不适用（见上面的「外观配置同步规则」）。
+
+**踩过的坑（务必记牢）**：第一版直接拿整个 `rule_key` 当窗口 id，而且照抄了测试 fixture——fixture
+自述「rewrites ids」、把 `rule_key` 也改成了 `week:1|day:1,00:00`，于是**测试全绿、线上却失配**。线上每周窗口
+的真实 id 是 `week:1|week:MON 00:00`，`weeklyID` 匹配不上 → `weeklyWindow` 为 nil → 周环与周读数都不画
+（主环的 `day:1|day:00:00` 恰好是真值，所以只有每周那半失效）。现在窗口 id 取自 `rule_key` 里 `|` 之前的
+稳定半段（`XyTokenUsage.windowID`，排程不进 id），fixture 也改回线上真实的 `rule_key`，并新增
+`testWindowIDIsTheStableHalfOfTheRuleKey` 钉住「排程不进 id」。**教训：核对 provider 数据以线上真实响应为准，
+fixture 只保证它自己内部一致。**
+
+另外，声明 `headlineID` 后主环不再回退 `windows.first`——站台若连 `rule_key` 前半段也改了，主环留白、
+周弧消失（与所有声明角色的 provider 一致，见 `QianwenUsage`）。kimi / opencode 未动；测试
+`testSiteWindowRolesResolveToTheParsedWindows` 钉住 site 声明与 parser 产出一致。清单与判据见上面的
+「外观配置同步规则」。
 
 ## 6. 浏览器会话 provider 的登录提示修复
 
@@ -795,5 +841,9 @@ upstream/main HEAD`）。upstream 本轮
    （哪节仍成立、哪节要动），都要报给用户。只说「已同步」不算汇报。
 7. 判断一处失败「是旧工具链的，还是 upstream 自己就坏的」，先看 `.github/workflows/*.yml` 的 `runs-on`：上游 CI 是
    **`macos-26`**，它的断言只在那个系统上被验证过。1.18.0 那处 `ApifyUsage.money` 的千分位就是这么定位的。
+8. **核对 provider 解析以线上真实响应为准，不要以测试 fixture 为准**：fixture 的注释常写着它会 rewrite id，
+   它只保证自己内部一致。§5 的 XyToken 窗口 id 就被 fixture 带偏过一次（测试全绿、线上周环不画）。
+   真值的取法：应用把响应体打进 `log stream`（`xytoken usage -> …`，被截断就再加一句日志），
+   或直接读解析结果——`~/Library/Preferences/com.vinz.codenotch.plist` 的 `lastGoodReadings`（base64 → JSON）。
 
 不复核的文档比没有文档更糟：它会让下一次 rebase 照着过期结论删掉还需要的东西。

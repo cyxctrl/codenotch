@@ -357,6 +357,25 @@ enum Sites {
         });
         return JSON.stringify({ status: s.status, body: await s.text() });
         """,
+        // Role declarations, by the window ids `XyTokenUsage` derives — the
+        // stable half of the station's `rule_key` (`day:1`, `week:1`), never the
+        // reset schedule after the `|`. Consumers resolve by exact id
+        // (`ProviderSnapshot.headline`, `weeklyLimitWindow`/`weeklyWindow`), so
+        // these are what make the weekly-ring settings and the weekly watcher
+        // apply here. The two differ (daily is the headline, weekly is the thin
+        // second ring), so the notch draws one main ring plus the optional
+        // weekly arc, as it does for Kimi and OpenCode — and declaring the
+        // headline also stops it following the response's array order. If the
+        // station ever renames them the ids resolve to nothing — a blank main
+        // ring, no weekly arc — which is the answer every id-declaring provider
+        // gives (see `QianwenUsage`), not the first window this used to fall
+        // back to. The menu bar is out of reach either way: `StatusItemSummary`
+        // needs a five-hour window or Claude/Codex. These ids were first written
+        // as the whole `rule_key` — copied from the test fixture, which rewrites
+        // it — and never matched the live `week:1|week:MON 00:00`, so the weekly
+        // ring drew nothing until the id was narrowed to its stable half.
+        headlineID: "day:1",
+        weeklyID: "week:1",
         parse: XyTokenUsage.windows(fromJSON:)
     )
 
