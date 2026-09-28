@@ -5,7 +5,10 @@ import XCTest
 /// — the call the station's wallet page makes right after refreshing its
 /// session. It is not a published API, so these are the tests that will fail
 /// first if the station changes it. The fixture keeps the recorded structure
-/// but rewrites ids and token counts, so no account data is checked in.
+/// and the recorded `rule_key` values — the window ids are derived from them,
+/// so a rewritten one would test a value the station never sends — while the
+/// subscription ids and token counts are rewritten so no account data is
+/// checked in.
 final class XyTokenUsageTests: XCTestCase {
     /// Trimmed from a recorded response: the two active windows under
     /// `subscriptions`, the same subscription repeated under
@@ -42,7 +45,7 @@ final class XyTokenUsageTests: XCTestCase {
                         },
                         {
                             "id": "13542",
-                            "rule_key": "week:1|day:1,00:00",
+                            "rule_key": "week:1|week:MON 00:00",
                             "name": "每周",
                             "period_value": 1,
                             "period_unit": "week",
@@ -87,7 +90,7 @@ final class XyTokenUsageTests: XCTestCase {
 
     func testDecodesTheLiveShape() throws {
         let windows = try XyTokenUsage.windows(fromJSON: live)
-        XCTAssertEqual(windows.map(\.id), ["day:1|day:00:00", "week:1|day:1,00:00"])
+        XCTAssertEqual(windows.map(\.id), ["day:1", "week:1"])
         XCTAssertEqual(windows.map(\.label), ["每日", "每周"])
         XCTAssertEqual(windows[0].usedFraction ?? -1, 0.05, accuracy: 0.0001)
         XCTAssertEqual(windows[1].usedFraction ?? -1, 0.05, accuracy: 0.0001)
@@ -95,6 +98,60 @@ final class XyTokenUsageTests: XCTestCase {
         XCTAssertEqual(windows[1].resetsAt, Date(timeIntervalSince1970: 1789315200))
         XCTAssertEqual(windows[0].duration, 86_400)
         XCTAssertEqual(windows[1].duration, 7 * 86_400)
+    }
+
+    /// The window id is the stable half of `rule_key` — the rule's unit and
+    /// count — never the reset schedule after the `|`, which moves with the
+    /// reset day. The weekly ring goes missing when the id carries it: the
+    /// first cut named the whole `rule_key`, and the live `week:MON 00:00`
+    /// never matched what the fixture had.
+    func testWindowIDIsTheStableHalfOfTheRuleKey() throws {
+        let json = """
+        { "data": { "subscriptions": [ { "quota_limits": [
+            { "rule_key": "day:1|day:00:00", "name": "每日",
+              "amount": 1000, "amount_used": 100, "window_end": 1788969600 },
+            { "rule_key": "week:1|week:MON 00:00", "name": "每周",
+              "amount": 1000, "amount_used": 100, "window_end": 1789315200 },
+            { "rule_key": "week:1|week:SUN 12:30", "name": "每周（别的重置日）",
+              "amount": 1000, "amount_used": 100, "window_end": 1789315200 } ] } ] } }
+        """
+        let windows = try XyTokenUsage.windows(fromJSON: json)
+        // The third entry resets on a different day and still lands on the same
+        // id as the second — the schedule is deliberately not part of it.
+        XCTAssertEqual(windows.map(\.id), ["day:1", "week:1", "week:1"])
+        XCTAssertEqual(windows.map(\.label), ["每日", "每周", "每周（别的重置日）"])
+    }
+
+    /// A limit that reports no `rule_key` still gets an id of its own, so two of
+    /// them cannot collapse into one window.
+    func testALimitWithoutARuleKeyFallsBackToItsPosition() throws {
+        let json = """
+        { "data": { "subscriptions": [ { "quota_limits": [
+            { "name": "无规则", "amount": 1000, "amount_used": 100, "window_end": 1788969600 },
+            { "name": "也无规则", "amount": 1000, "amount_used": 100, "window_end": 1788969600 } ] } ] } }
+        """
+        let windows = try XyTokenUsage.windows(fromJSON: json)
+        XCTAssertEqual(windows.map(\.id), ["limit-0", "limit-1"])
+    }
+
+    /// The site declares which window is the headline and which is the weekly
+    /// allowance, and consumers resolve those by id. This is the assertion that
+    /// would have caught the first cut of those declarations: they named the
+    /// whole `rule_key`, and the fixture — recorded with rewritten `rule_key`s —
+    /// agreed with them, so the test passed while the live `week:1|week:MON
+    /// 00:00` resolved to nothing and drew no weekly ring. The fixture now
+    /// keeps the recorded `rule_key`s, so this asserts against what the station
+    /// actually sends.
+    func testSiteWindowRolesResolveToTheParsedWindows() throws {
+        let headlineID = try XCTUnwrap(Sites.xytoken.headlineID)
+        let weeklyID = try XCTUnwrap(Sites.xytoken.weeklyID)
+        let ids = try XyTokenUsage.windows(fromJSON: live).map(\.id)
+        XCTAssertTrue(ids.contains(headlineID),
+                      "headlineID \(headlineID) resolves to no parsed window: \(ids)")
+        XCTAssertTrue(ids.contains(weeklyID),
+                      "weeklyID \(weeklyID) resolves to no parsed window: \(ids)")
+        XCTAssertNotEqual(headlineID, weeklyID,
+                          "one window cannot be both the headline and the weekly ring")
     }
 
     /// The cycle length comes from the limit's own period. `window_start` is
@@ -171,7 +228,7 @@ final class XyTokenUsageTests: XCTestCase {
                   "window_start": 1788940296, "window_end": 1788969600 } ] } ] } }
         """
         let windows = try XyTokenUsage.windows(fromJSON: json)
-        XCTAssertEqual(windows.map(\.id), ["day:1|day:00:00"])
+        XCTAssertEqual(windows.map(\.id), ["day:1"])
         XCTAssertEqual(windows[0].usedFraction ?? -1, 0.1, accuracy: 0.0001)
     }
 

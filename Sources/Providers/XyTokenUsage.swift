@@ -15,6 +15,10 @@ import Foundation
 ///         "rule_key": "day:1|day:00:00", "name": "每日",
 ///         "amount": 75000000, "amount_used": 4855975, "remaining": 70144025,
 ///         "window_start": 1788940296, "window_end": 1788969600
+///       }, {
+///         "rule_key": "week:1|week:MON 00:00", "name": "每周",
+///         "amount": 300000000, "amount_used": 4855975, "remaining": 295144025,
+///         "window_start": 1788940296, "window_end": 1789315200
 ///       }]
 ///     }],
 ///     "all_subscriptions": [ … same entries plus expired ones … ]
@@ -25,6 +29,15 @@ import Foundation
 /// `window_*` are Unix seconds. Active windows live under `subscriptions`;
 /// `all_subscriptions` repeats them alongside expired ones and is only a
 /// fallback.
+///
+/// Window ids are the stable half of `rule_key` — everything before the `|`
+/// (`day:1`, `week:1`) — not the whole string. The right half is the reset
+/// schedule, and it moves: the week rule reads `week:MON 00:00` for a Monday
+/// reset and would read something else for another day. `Sites.xytoken`
+/// declares its headline and weekly roles by id, and consumers match those
+/// exactly, so an id that carried the schedule would stop resolving the
+/// moment the schedule changed — which is how the weekly ring went missing
+/// the first time these were declared.
 enum XyTokenUsage {
     struct Response: Decodable {
         struct Data: Decodable {
@@ -61,7 +74,7 @@ enum XyTokenUsage {
             guard let amount = limit.amount, amount > 0,
                   let used = limit.amount_used else { continue }
             windows.append(LimitWindow(
-                id: limit.rule_key ?? "limit-\(index)",
+                id: windowID(fromRuleKey: limit.rule_key, index: index),
                 label: limit.name ?? "Limit",
                 usedFraction: used / amount,
                 resetsAt: limit.window_end.map { Date(timeIntervalSince1970: $0) },
@@ -72,6 +85,17 @@ enum XyTokenUsage {
             throw UsageProviderError.nothingMetered("XyToken has no active quota windows")
         }
         return windows
+    }
+
+    /// The window id: the part of `rule_key` before the `|`, which is the
+    /// rule's unit and count (`day:1`, `week:1`, `hour:3`) rather than the
+    /// schedule after it. See the type comment for why the schedule half is
+    /// not kept. A limit that reports no `rule_key` falls back to its position,
+    /// which at least stays unique within one response.
+    private static func windowID(fromRuleKey ruleKey: String?, index: Int) -> String {
+        guard let ruleKey, !ruleKey.isEmpty else { return "limit-\(index)" }
+        guard let bar = ruleKey.firstIndex(of: "|") else { return ruleKey }
+        return String(ruleKey[ruleKey.startIndex..<bar])
     }
 
     /// Length of one quota cycle, for the tooltip's pace line.
