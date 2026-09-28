@@ -287,7 +287,10 @@ final class UsageStore: ObservableObject {
         switch provider.signInRoute {
         case .modal:
             return snapshotStatus(provider.id) == .needsAuth
-        case .openApp, .guidance:
+        // `.command` (upstream's CLI-backed sign-in, which runs the tool's own
+        // login command) belongs with `.openApp` and `.guidance`: it borrows a
+        // local credential too, so an account-less provider is a signed-out one.
+        case .openApp, .guidance, .command:
             return true
         }
     }
