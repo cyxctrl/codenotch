@@ -12,15 +12,16 @@ git rebase --onto upstream/main <fork 基点> main   # 注意 --onto，理由见
 这份文档的唯一目的：**下次 rebase 时不必重新推导「这条改动为什么存在、还需不需要」。**
 每节按同一格式写——为什么存在 / 涉及文件 / rebase 时怎么判断。
 
-> 写入时的基线：`upstream/main = 07ba1db`——版本号 **1.18.0 (20)**，本轮 174 个提交、跨过
-> 1.17.0 与 1.18.0 两个版本（历轮最多的一轮：顶点上连着 39 个提交都是 notch 与 Mac 硬件凹口合并/分离的
-> 整体重做；CLI 账号改从按钮跑自己的登录命令——新的 `SignInRoute.command`；新增 Apify / Amp /
-> Kilo 三个 provider；OpenCode 改从 SQLite 读 OAuth；通知统一走一个通道——notch 或横幅；
-> Windows 端的系统代理与可自适应背景的折叠胶囊；`make dmg` 换成 create-dmg；追加 id / ko / uz /
-> tr 四种本地化；「限额已用尽」只播报一次；Claude ring 显示归属到具体账号/profile），
+> 写入时的基线：`upstream/main = 0083369`——版本号 **1.19.0 (21)**，本轮只有 **3 个提交**（历轮最少的一轮：
+> 顶点那笔是 1.19.0 的功能发布，讲的是 notch 改由设置按钮旁那六颗点**拖着走**——`MoveGrip` 顶替了
+> 旧的 move handle 与它在设置里的开关，`EdgeDropZones` / `DropZoneOverlay` 一起删掉，几何收进新的
+> `CornerPassage`，面板沿屏幕边与圆角走；新增 `Sources/Features/UpdateCard.swift`，新版本改在 notch 里问
+> （Update / Later）也在那里装，upstream 为此自己写了一个 Sparkle user driver，updater 改成启动时就起；
+> provider 环的百分比跨过 Mac 的硬件凹口；另一笔修的是「切换 provider 会卡住」——`TerminalCommand`
+> 在登录 shell 期间握着锁并 `waitUntilExit`，转 run loop 时设置页重入、又去抢自己已持有的锁），
 > 本机 **macOS 14.3 + Xcode 15.4（Swift 5.10）**。
 > 上游在 1.11.0 之前重写过全部历史（见「上游重写过历史」），旧 hash `abccf0e` 已不在 upstream；
-> **这一轮没有重写**：rebase 前跑 `git merge-base main upstream/main` 有值，就是上轮的基点 `784985e`。
+> **这一轮没有重写**：rebase 前跑 `git merge-base main upstream/main` 有值，就是上轮的基点 `07ba1db`。
 > 每次 rebase 后请更新这一行和文中已过期的结论（见末尾「维护」）。
 
 ## 目录
@@ -81,6 +82,7 @@ done
 1.13.1 → 1.15.0（45 个提交）复核：**仍然没有重写**，输出 `bcd063c`（上轮的基点）。
 1.15.0 → 1.16.0（68 个提交）复核：**仍然没有重写**，输出 `ec1a7e3`（上轮的基点）。
 1.16.0 → 1.18.0（174 个提交）复核：**仍然没有重写**，输出 `784985e`（上轮的基点）。
+1.18.0 → 1.19.0（3 个提交）复核：**仍然没有重写**，输出 `07ba1db`（上轮的基点）。
 所以**下次先跑这一条判断**：有输出就走普通 rebase / `--onto` 都行，输出为空才需要去比对 tree。
 
 ## rebase 流程与验证基线
@@ -159,9 +161,24 @@ contrast」）——而 fork 在同一行把 `#available(macOS 26)` + `glassEffe
 `ApifyUsage.money` 在 `en_US_POSIX` 下拿不到分组（那个 locale 的 decimal 模式 `groupingSize` 是 0），`$12,345.68`
 变成 `$12345.68`——upstream 的 CI 跑在 **`macos-26`** 上，所以它在那边是绿的（见「旧工具链编译错误的常见形态」）。
 
+1.19.0 这轮（**只有 3 个提交**，历轮最少，命令：`git rebase --onto upstream/main 07ba1db main`）。**3 个文件冲突、停两次**：
+`project.yml` 里 upstream 在 `SUEnableAutomaticChecks: true` 下面新加了一段「新版本在 notch 里问、选了 Update
+才装」的注释，正好紧贴 fork 改成 `false` 的那一行；而它**同时把 `SUAutomaticallyUpdate` 从 `true` 改成 `false`**（两处
+文件都改，所以 fork 那半截不再独有）→ 值取 fork 的 `SUEnableAutomaticChecks: false`、注释取 upstream 的
+（它讲的是它下面那行，两边现在都成立），见第 4 节；`MoveHandle.swift` 与
+`SettingsHandle.swift` 里 upstream 把 notch 的拖拽整套换成了「六颗点」那套（`struct MoveHandle` 变成
+`enum MoveHandle` **加** `MoveGrip`；`SettingsHandle` 的玻璃分支里新增 `.mask { GooArc(…) }`）→ 前者取
+upstream（fork 改的那个 struct 已经不存在），后者取 upstream 的新结构、只把 `glassEffect` 换成 shim
+（见第 1 节与「冲突热点」）。其余 24 个 fork 提交干净落地——含 `NotchRootView.swift`、`SettingsView.swift`、
+`AppDelegate.swift`、`Tests/NotchRenderTests.swift`、`Tests/NotchLayoutTests.swift` 这些 fork 也改过的文件。
+`git range-diff 07ba1db..backup/pre-rebase-1.19.0 upstream/main..main` 只有上面那两笔冲突提交显示内容差异，
+逐行看下来正是那两处的解。**本轮有 1 笔旧工具链 fallout**：两处新的 `glassEffect` 调用点——
+`MoveGrip.glassDots` 与**全新文件** `Sources/Features/UpdateCard.swift`，后者不产生冲突、只在编译期暴露，
+见「旧工具链编译错误的常见形态」。**本轮没有穷尽 switch、没有旧 Foundation 的格式断言**，所以只这一笔。
+
 macOS 14.3 + Xcode 15.4 上的实测基线：**2038 个测试通过、11 个跳过、0 失败**（1.10.0 是 1387，
 1.11.0 首发 1531/4，1.11.0 同步后 1566/5，1.12.0 1575/5，1.13.1 是 1603/5，1.15.0 是 1666/5，
-1.16.0 是 1736/8，本轮 2038/11）。
+1.16.0 是 1736/8，1.18.0 是 2038/11，本轮 2051/11）。
 11 个跳过是 **6 个 opt-in live check**（Devin、LM Studio、Ollama，加本轮新增的 Amp、Apify 和
 `TooltipRenderTests.testLiveClaudeResetCard`）加 **5 个玻璃测试**（`NotchRenderTests` 2 个 +
 `UsageBandTests` 的 `PaletteAppearanceTests` 3 个，见第 7 节）——**玻璃那 5 个一个没变**，本轮多出来的
@@ -176,6 +193,14 @@ macOS 14.3 + Xcode 15.4 上的实测基线：**2038 个测试通过、11 个跳�
 实测回读那份 plist：`LSMinimumSystemVersion` = 14.3、`SU*` 三项为 false / false / 空（见第 4 节）。
 1.18.0 这轮 `Scripts/install-app.sh` 装出 **1.18.0 (20)**、ad-hoc 签名，`/Applications` 那个进程正常起来；
 实测回读那份 plist：`LSMinimumSystemVersion` = 14.3、`SU*` 三项为 false / false / 空（见第 4 节）。
+1.19.0 复核：跳过的 11 个**构成一个没变**（6 个 opt-in live check + 玻璃 5 个），总数多出来的 13 个
+全是 upstream 的功能测试；`NotchRenderTests` 那两行 `XCTSkipUnless` 自动合并干净、继续留。
+1.19.0 这轮 `Scripts/install-app.sh` 装出 **1.19.0 (21)**、ad-hoc 签名，`/Applications` 那个进程正常起来。
+本轮值得记一笔：upstream 把 updater 改成**启动时就起**（以前只有打开设置页才起），于是 Sparkle.framework
+现在真的会被 dyld 加载进进程——实测 `vmmap` 在那份进程里能看到 `Sparkle.framework/Versions/B/Sparkle`，
+与第 2 节里「ad-hoc + hardened runtime 会让 dyld 拒绝加载」的老经验不同（本轮的 ad-hoc 签名没有
+hardened runtime 位，`codesign -dv` 只印 `flags=0x2(adhoc)`）。实测回读那份 plist：`LSMinimumSystemVersion` = 14.3、
+`SU*` 三项为 false / false / 空（见第 4 节）。
 
 ## 1. macOS 14.3 部署目标与 SDK shim
 
@@ -190,7 +215,8 @@ macOS 14.3 + Xcode 15.4 上的实测基线：**2038 个测试通过、11 个跳�
 - `Sources/Settings/NotchSurfaceStyle.swift`：`var glass: Glass` 连同它的文档整段在
   `#if swift(>=6.2)` 里（理由见下）
 - `Tests/NotchLayoutTests.swift`：唯一比较 `glass` 值的那个测试同样在 `#if swift(>=6.2)` 里
-- 调用点：`SettingsView`、`NotchRootView`、`MoveHandle`、`SettingsHandle`、`TooltipCard`、`UsageResetCard`
+- 调用点（1.19.0 起）：`SettingsView`（2）、`NotchRootView`、`MoveHandle`、`SettingsHandle`（2）、`TooltipCard`、
+  `UsageResetCard`、`UpdateCard`
 
 **rebase 时怎么判断**：本机还在 macOS 14 / Xcode 15.4 上就留着。shim 用
 `#if swift(>=6.2)` 判断「这个工具链里有没有 macOS 26 SDK」（Xcode 26 = Swift 6.2，
@@ -265,6 +291,16 @@ NotchRootView 多一层：upstream 新加了 `if headlessGlass { … } else { �
 但没有材质」的那一层）。**保留 upstream 的 if/else 结构**，只把 else 分支里的 `glassEffect` 换成
 shim——不要像上一轮那样把整块压成一次调用，压掉就丢了 headless 路径。
 
+1.19.0 复核：upstream 这轮新增了**一处**调用点（全新文件 `Sources/Features/UpdateCard.swift`，notch 里的更新卡），
+同时**删掉了两处**——旧的 `struct MoveHandle` 整个没了（它的两个玻璃分支随 struct 一起消失，换成 `enum MoveHandle`
+的几何 + `MoveGrip` 的新代码）。于是总数仍是 **upstream 8 处 `glassEffect` + 1 处 `pointerStyle`，与 fork 的
+**8 处 `compatGlassEffect` + 1 处 `compatPointerStyle` 一一对应**：`MoveHandle` 由 2 变 1（新代码里的
+`MoveGrip.glassDots`）、`UpdateCard` 由 0 变 1，其余六处位置不变。两处新调用点**都不在冲突区里**——
+（`UpdateCard.swift` 是新增文件、根本不会冲突；`MoveGrip.glassDots` 落在 `MoveHandle.swift` 里自动合并的那部分——
+那个文件另有冲突，但不在这一处），只有 `make build` 才报 `value of type 'some View' has no
+member 'glassEffect'`——这正是「新文件不冲突」那条盲点，见「旧工具链编译错误的常见形态」。
+`NotchSurfaceStyle.glass` 上游依旧只有 `@available`、没有自带门禁，fork 的 `#if swift(>=6.2)` 与 shim 原样需要。
+
 ## 2. ad-hoc 签名、DEV_RESIGN 与安装路径
 
 **为什么存在**：本机没有证书时，`make` 的三个签名分支是
@@ -316,6 +352,12 @@ Scripts/install-app.sh     # 退出码非 0 就是没起来
 **顺带记一笔（不影响这条路径）**：那两处新逻辑各自开头加了 `command -v create-dmg`，而本机**没装** create-dmg
 （`which create-dmg` 为空）——所以 `make dmg` / `make dmg-ci` 现在会在这里停下并提示 `brew install create-dmg`。
 `make install` / `Scripts/install-app.sh` 不碰这两个目标，装机和验证都不受影响。
+1.19.0 复核：`Scripts/` 与 `Makefile` 整个**没进** upstream 本轮的改动集，格局原样；本轮装出 **1.19.0 (21)**、
+ad-hoc，`/Applications` 那个进程起来了——**顺带验了一条老经验**：upstream 把 updater 改成启动时就起，于是
+Sparkle.framework 这次真的进了进程（`vmmap` 能看到），说明本轮的 ad-hoc 签名没有 hardened runtime 位
+（`codesign -dv` 只印 `flags=0x2(adhoc)`），上面那句「dyld 拒绝加载 Sparkle」在这里不成立。
+但是——既然 updater 现在会被起，而 fork 的 `SUFeedURL` 是空的，**下一轮若 upstream 再动 `AppDelegate` 的
+updater 启动，值得顺手看一眼 `log stream` 里有没有 Sparkle 的报错**（本轮没看到异常）。
 
 ## 3. SwiftNIO 固定在 2.86.x
 
@@ -359,6 +401,9 @@ SwiftPM 会跳过自己读不了的版本，所以 `from: "2.86.0"` 会落在 2.
 1.18.0 复核：同样只改版本号（`1.18.0` / `20`），`packages:` 段与 `Package.resolved` 都没动
 （`git diff --name-only 784985e upstream/main -- Package.resolved` 为空，`project.yml` 的 diff 里也不含 `packages:`
 上下文行），fork 的 `from: "2.86.0"` 与解析结果 swift-nio 2.86.2 原样落地。
+1.19.0 复核：同样的形态——只改版本号（`1.19.0` / `21`），`packages:` 段与 `Package.resolved` 都没进 upstream 的
+改动集（`git diff --name-only 07ba1db upstream/main -- Package.resolved` 为空），fork 的 `from: "2.86.0"` 与解析结果
+swift-nio **2.86.2**（`revision` `a18bddb0acf7`）原样落地。
 
 ## 4. 关闭 Sparkle 自动更新
 
@@ -391,6 +436,24 @@ SwiftPM 会跳过自己读不了的版本，所以 `from: "2.86.0"` 会落在 2.
 所以 `project.yml` 那里真冲突了——本地化列表取 upstream、版本下限保持 14.3，见「rebase 流程与验证基线」）。
 `SU*` 三行没进它的改动集，本地依旧 false / false / 空；装出来的 1.18.0 实测回读：`LSMinimumSystemVersion` = 14.3、
 `SUFeedURL` 为空、`SUEnableAutomaticChecks` / `SUAutomaticallyUpdate` 均为 false。
+1.19.0 复核：**upstream 这轮改了键值，而且是往 fork 的方向改**——它把 `SUAutomaticallyUpdate` 从 `true` 改成
+`false`（`project.yml` 与 `Sources/Info.plist` 两处都改：`git diff 07ba1db upstream/main -- Sources/Info.plist` 只有这一行），
+理由是新的「新版本在 notch 里问」流程——它的 commit message 写着 *Never downloads unasked*。于是一分为二：
+
+- `SUAutomaticallyUpdate: false` **两边现在一致**：fork 那笔提交的后半截等于被 upstream 吸收了（`cherry` 仍显示 `+`，
+  因为整笔还含另外两键——与「已被 upstream 吸收」小节里 Claude filter 那条同一类，只能人工看）。
+- fork 真正独有**只剩两处**：`SUEnableAutomaticChecks: false` 与 `SUFeedURL: ""`（外加那段说明注释）。
+  `SUEnableAutomaticChecks` upstream 仍是 `true`，所以要继续压住。
+
+冲突的成因也随之清楚：`project.yml` 里 upstream 在 `SUEnableAutomaticChecks: true` 下方插了一段注释，正好紧贴 fork
+改成 `false` 的那行 → 值取 fork、注释取 upstream（它讲的是它下面那行 `SUAutomaticallyUpdate: false`，两边现在都成立）。
+**代价这一轮要记清楚**：1.19.0 新增的「更新在 notch 里问（`UpdateCard`）、自己写 Sparkle user driver、updater
+启动时就起」这套**在 fork 里完全不会出现**——`SUFeedURL` 为空意味着 appcast 永远取不到，`SUEnableAutomaticChecks: false`
+又关掉了定时检查，所以那个红点、Update / Later、安装进度都只是死代码。这正是 fork 的意图（永不替换），不必回退；
+**判断依据没变**：`SUEnableAutomaticChecks` / `SUFeedURL` upstream 只要还是 `true` / 有地址，本地就继续 `false` / 空；
+`SUAutomaticallyUpdate` 既然 upstream 自己也关了，fork 不必再改它——**下轮这里会更干净**（只剩两键）。
+装出来的 1.19.0 实测回读：`LSMinimumSystemVersion` = 14.3、`SUFeedURL` 为空、
+`SUEnableAutomaticChecks` / `SUAutomaticallyUpdate` 均为 false。
 
 ## 5. XyToken provider（fork 独有功能）
 
@@ -467,6 +530,11 @@ upstream 单独加，与 fork 不相邻，自动合并干净）。
 `UsageProvider` actor、各有自己的 `signInRoute`（Amp / Apify / Kilo 都是 `.guidance`——在终端里跑各自的登录命令，
 **没有**走本轮新的 `.command`），**不是** `WebSessionProvider`，
 所以 `webProviders` 这个列表不需要再加东西。
+1.19.0 复核：upstream 这轮**没碰** `Sites.swift`（`git log --oneline 07ba1db..upstream/main -- Sources/Providers/Sites.swift`
+为空），三处注册原样：`let webProviders: [WebSessionProvider] = [deepSeek, qianwen, xytoken]`、
+`fleet.signInItems = [deepSeek, miniMaxWeb, qianwen, xytoken]`、`xytoken` 的构造。`AppDelegate.swift` 本轮 upstream 改了
+（updater 改成启动时就起），但落在 `applicationDidFinishLaunching` 那段，与注册不同区段——fork 侧只剩那三处
+加上 `+=` 拆解，`git diff upstream/main HEAD -- Sources/App/AppDelegate.swift` 一眼可核。
 
 本节本地演进（**非 rebase**）：给 `static let xytoken` 补上窗口角色 `headlineID: "day:1"` /
 `weeklyID: "week:1"`，使外观面板里依赖 `weeklyID` 的那组配置（每周圆环、虚线每周圆环、圆环读数含每周、
@@ -538,6 +606,11 @@ install:)`（CLI 账号的登录按钮：在新终端里跑那个工具自己的
 提示登录。
 `UsageStore` 与 `ProviderAccount` 本轮都没进 upstream 的改动集，上面那处是本节唯一的改动；`SettingsView` 的两处
 读取（`isSetUp`、`AccountRow` 的 `!provider.needsSignIn` 分支）自动合并干净、原样保留。
+1.19.0 复核仍是**上游没修**：`grep -rn needsSignIn Sources/` 命中的仍全是 fork 的（`ProviderAccount.needsSignIn` 的
+声明、`UsageStore.needsSignIn(_:account:)` 与调用点、`SettingsView` 的两处读取），upstream 侧只有 `needsSignInRenewal`。
+upstream 本轮**没有再给 `SignInRoute` 加 case**（仍是 1.18.0 那四个：`.modal` / `.openApp` / `.guidance` / `.command`），
+所以 fork 的穷尽 switch 原样编过——本轮没有这一形态的 fallout。**穷尽 switch 是每轮都要过的关**：
+`UsageStore` 与 `ProviderAccount` 本轮都没进 upstream 的改动集，但下一轮很可能进，别因为连着没事就放宽这条判据。
 
 ## 7. 玻璃样式测试在 macOS 26 以下跳过
 
@@ -684,6 +757,9 @@ upstream/main | grep -i kimi` 为空），信号 grep 仍只命中 fork 的 `Kim
 原样在页，与 upstream 改的 `signInRoute` 不同区段，自动合并干净。
 这一整笔提交继续留着。**注意新形态**：`KimiProvider` 现在是「upstream 改一处、fork 改另一处」的共享文件，
 下轮 rebase 别再默认它整文件是 fork 的。
+1.19.0 复核：**上游仍未修**，而且这轮**一个 Kimi 文件都没碰**（`git diff --name-only 07ba1db upstream/main | grep -i kimi`
+为空）——`KimiProvider` 因此自动合并干净，`fetchSnapshot()` 里那句 `refresher.usableCredential()` 原样在页，
+这一整笔继续留着。
 
 ## 冲突热点（真实踩到过的）
 
@@ -705,8 +781,12 @@ upstream/main | grep -i kimi` 为空），信号 grep 仍只命中 fork 的 `Kim
 | `MacOS26Shims.swift` 的签名 | shim 收 `Glass` 则调用点在旧 SDK 上必编译失败 | shim 只收 `NotchSurfaceStyle`，调用点不写 `Glass`，见第 1 节 |
 | `Makefile` | upstream 的 SwiftPM 逻辑与 fork 的签名逻辑在同一块 | 两边都留 |
 | `Package.resolved` | upstream 新增的锁定文件会盖掉 fork 的 pin | 见第 3 节 |
+| `MoveHandle.swift` | upstream 1.19.0 把整个 `struct MoveHandle` 换成 `enum MoveHandle`（只剩两面弧共用的几何）**加** `MoveGrip`（六颗点的整套绘制），fork 那笔 shim 改的 `restingArc` / `hoverDisc` 正好是被删掉的两个成员 | **整块取 upstream**：不要试图把 fork 的旧代码搬回来（`arcRadius` / `restingTrim` 在 `MoveGrip` 里已不存在）。新代码里的 `glassDots` 才是需要 shim 的地方，算「旧工具链 fallout」，见第 1 节 |
+| `SettingsHandle.swift` 的玻璃分支 | 同一段里 upstream 新增 `.mask { GooArc(…) }`（弧线改成跟着 flare 走，不再是 `clipShape(ArcBand(…))`），而 fork 在那里删的是 `#available` 包装、换的是调用 | 取 upstream 的新结构（`.mask { GooArc }`），只把 `glassEffect` 换成 `compatGlassEffect`——两者不是一回事，别把 `GooArc` 换回 `ArcBand` |
+| `project.yml` 的 `SU*` 段 | upstream 1.19.0 在 `SUEnableAutomaticChecks` 与 `SUAutomaticallyUpdate` 之间插了一段注释（正好落在 fork 那两行中间），并**顺手把 `SUAutomaticallyUpdate` 改成 `false`**（与 fork 同向） | `SUEnableAutomaticChecks` 取 fork 的 `false`、`SUFeedURL` 取空、注释取 upstream；`SUAutomaticallyUpdate` 现已两边一致、不必再动，见第 4 节 |
+| **upstream 新增的文件**（1.19.0 的 `Sources/Features/UpdateCard.swift`） | **不产生任何冲突**：fork 从没碰过它，git 只把它加进来；但里面有 `glassEffect` 时编译直接红 | 不要在「冲突都解完了」时收工——解完冲突后重跑第 1 节那条 grep，再 `make build` |
 
-**教训**：`git rebase` 打出「Auto-merging」**不等于**没问题，而且有**两种**表现：
+**教训**：`git rebase` 打出「Auto-merging」**不等于**没问题，而且有**三种**表现：
 
 1. **合并结果自相矛盾**：enum case、README 表格这类「追加一行」的改动被自动合并成重复定义。
    （1.18.0 没有出现这一种——upstream 新增的 kilo / amp / apify 都落在 fork 从没碰过的文件里。）
@@ -715,7 +795,11 @@ upstream/main | grep -i kimi` 为空），信号 grep 仍只命中 fork 的 `Kim
    `SignInRoute.command` → `needsSignIn` 的穷尽 switch，`ApifyUsage.money` 在 `en_US_POSIX` 下的分组
    （这轮没有新增 macOS 26 API，所以「新 API」那条没触发）。
 
-两种都**只有编译期和测试期才发现**，所以 rebase 之后必须 `make build` + `make test`，不能只确认
+3. **冲突清单里根本没有的新文件**：upstream 新增的文件不进任何冲突——1.19.0 的 `Sources/Features/UpdateCard.swift`
+   被整份加进来，git 一句提示都没有，只有 `make build` 报 `value of type 'some View' has no member 'glassEffect'`。
+   所以第 1 节那条 grep 要在**解完冲突之后**再跑一遍，不要只在冲突文件里找。
+
+三种都**只有编译期和测试期才发现**，所以 rebase 之后必须 `make build` + `make test`，不能只确认
 「冲突都解完了」。
 
 ## 旧工具链编译错误的常见形态
@@ -756,6 +840,9 @@ upstream/main | grep -i kimi` 为空），信号 grep 仍只命中 fork 的 `Kim
   改断言——`formatter.groupingSize = 3`，这在「本来就按三位分组」的 locale 上是 no-op。**判断手法**：先看 upstream
   的 CI 跑在哪个 runner，再用一段独立的 `swift` 脚本在本机复现同一个 API 的行为（`swift /tmp/x.swift` 几秒钟就有
   答案），别凭猜。
+- **新文件里的新 API**：这一形态**不经过冲突**——1.19.0 的 `Sources/Features/UpdateCard.swift` 是 upstream 新增的
+  文件，rebase 时整份加进来、没有任何冲突标记，`make build` 才报 `value of type 'some View' has no member 'glassEffect'`。
+  对策：解完冲突后**重跑一遍第 1 节的 grep**，并按第 1 节的形态改（删 `#available` 包装、换 `compat*` 调用）。
 
 ## 已被 upstream 吸收的本地改动
 
@@ -793,6 +880,13 @@ grep -n 'collapsedSidebarToggle\|sidebarToggle' upstream/main -- Sources/Setting
 ```
 
 上游侧不再有这两个名字时，本节描述的状态即成立。
+
+**`SUAutomaticallyUpdate: false`（1.19.0 起被 upstream 吸收一半）**：fork 的 `37f56e9` 把这一项从 `true` 改成 `false`，
+1.19.0 upstream 自己也这么改了（`project.yml` 与 `Sources/Info.plist` 两处，理由是它新的「新版本在 notch 里问」
+流程），于是 fork 提交里这半截就任务完成了——`cherry` 看不出来（整笔仍含 `SUEnableAutomaticChecks: false` 与空
+`SUFeedURL`，那两处仍要留，所以整笔仍是 `+`）。**代价：无**——这一项现在两边一致，rebase 时不再需要维护它，
+下一轮 `project.yml` 的 `SU*` 段若能只冲突 `SUEnableAutomaticChecks` / `SUFeedURL` 两行，就说明这里记对了。
+判据（比 `cherry` 直接）：`git diff upstream/main HEAD -- project.yml Sources/Info.plist` 里还剩几键，就只有那几键要留。
 **判断方法**
 
 ```sh
@@ -826,6 +920,14 @@ upstream/main HEAD`）。upstream 本轮
 `KimiProvider` 的 `signInRoute`、两个 tooltip 的玻璃行、`project.yml` 与 `Sources/Info.plist` 的本地化列表——但
 **没有一件事是「把 fork 的改动做了」**：五处都是不同内容落在同一文件或同一行，所以仍然要人工看，不能只看 `cherry`。
 本节里 §6（`needsSignIn`）与 §8（Kimi 续期）两条本轮都复核过：upstream 依然没修，继续保留，理由和信号见各自小节。
+1.19.0 复核（**3 个提交、历轮最少**）：`git cherry -v upstream/main main` = **28 行**（26 个重放 + 本轮那笔
+fallout + 本笔记账），仍全为 `+`，**没有新增被吸收的条目**。对比面是 **38 个文件 / +3087 -183**
+（`git diff --shortstat upstream/main HEAD`，含本笔记账；在 `141ed27` 那个时点是 38 / +2985 -183，
+在解完冲突的 `43cd257` 时点是 36 / +2964 -158——**记这一行时务必在最终 tip 上重跑**，别沿用冲突刚解完时的数）。
+upstream 本轮碰了 fork 也改过的三个文件——`project.yml`（`SUEnableAutomaticChecks` 旁边的新注释）、
+`MoveHandle.swift`（整套重写成 `enum` + `MoveGrip`）、`SettingsHandle.swift`（玻璃分支里新增 `.mask { GooArc }`）——
+三处都是**不同内容落在同一行或同一段**，所以仍然要人工看，不能只看 `cherry`。§6（`needsSignIn`）与 §8（Kimi 续期）
+两条本轮都复核过：upstream 依然没修，继续保留，理由和信号见各自小节。
 
 ## 维护
 
