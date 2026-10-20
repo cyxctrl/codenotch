@@ -759,9 +759,21 @@ final class EdgeCrossfadeTests: XCTestCase {
         XCTAssertEqual(controller.model.edge, .bottom)
         XCTAssertEqual(controller.panelAlphaForTesting, 1, accuracy: 0.01,
                        "the notch never came back")
-        guard let screen = NotchGeometry.preferredScreen(from: NSScreen.screens) else { return }
-        XCTAssertEqual(controller.panelFrameForTesting?.minY ?? -1,
-                       screen.frame.minY, accuracy: 1,
+        // The screen the panel is actually on, read off the panel itself.
+        // Re-resolving `NotchGeometry.preferredScreen(from:)` here would go back
+        // through `NSScreen.main`, which is not stable in a headless test host:
+        // this Mac runs an external monitor above the built-in one, and on the
+        // first run the assertion compared the built-in's 0.0 against the
+        // external's 982.0 — two different screens, not a misplaced panel.
+        guard let frame = controller.panelFrameForTesting else {
+            return XCTFail("no panel")
+        }
+        guard let screen = NSScreen.screens.first(where: {
+            $0.frame.contains(CGPoint(x: frame.midX, y: frame.midY))
+        }) else {
+            return XCTFail("the panel is on no screen at all")
+        }
+        XCTAssertEqual(frame.minY, screen.frame.minY, accuracy: 1,
                        "it did not end up on the edge it was sent to")
     }
 
