@@ -12,16 +12,20 @@ git rebase --onto upstream/main <fork 基点> main   # 注意 --onto，理由见
 这份文档的唯一目的：**下次 rebase 时不必重新推导「这条改动为什么存在、还需不需要」。**
 每节按同一格式写——为什么存在 / 涉及文件 / rebase 时怎么判断。
 
-> 写入时的基线：`upstream/main = 0083369`——版本号 **1.19.0 (21)**，本轮只有 **3 个提交**（历轮最少的一轮：
-> 顶点那笔是 1.19.0 的功能发布，讲的是 notch 改由设置按钮旁那六颗点**拖着走**——`MoveGrip` 顶替了
-> 旧的 move handle 与它在设置里的开关，`EdgeDropZones` / `DropZoneOverlay` 一起删掉，几何收进新的
-> `CornerPassage`，面板沿屏幕边与圆角走；新增 `Sources/Features/UpdateCard.swift`，新版本改在 notch 里问
-> （Update / Later）也在那里装，upstream 为此自己写了一个 Sparkle user driver，updater 改成启动时就起；
-> provider 环的百分比跨过 Mac 的硬件凹口；另一笔修的是「切换 provider 会卡住」——`TerminalCommand`
-> 在登录 shell 期间握着锁并 `waitUntilExit`，转 run loop 时设置页重入、又去抢自己已持有的锁），
+> 写入时的基线：`upstream/main = 9e7cd3d`——版本号 **1.23.0 (25)**，本轮 **61 个提交**。
+> 顶点那笔是 1.23.0 的功能发布，四件事：**「remaining mode」**（notch 可以读「还剩多少」而不是「已用多少」，
+> 环的扫过角度、环下数字、卡片与菜单跟着翻，另有「任一窗口耗尽就把两个环都关掉」「按剩余排序」
+> 「隐藏已耗尽的账号」三个可选开关）；**Dock 表面样式**（notch 变成贴着屏幕边的浮起玻璃板，
+> `NotchSurfaceStyle` 多出 `.dock` 与 `slabGlass` 两处新 API，见第 1 节）；**oMLX 与 Muse 两个新 provider**；
+> **远程 Claude / Codex 主机**（`preferences.remoteHosts`，经 SSH 读别的机器上的凭证）。
+> 其余是：Grok Bot 的周窗口改从磁盘缓存读、Enterprise 花费上限的月底预测、Z.AI 的键可取自 `GLM_API_KEY`、
+> `UsageArchive` 清理旧 Perplexity 条目、工作指示器换成品牌色「呼吸圆点」（可选）、DeepSeek 在中国法定
+> 节假日全天走 off-peak、外接显示器睡眠唤醒后恢复 notch，以及若干 Windows 端与文档提交。
 > 本机 **macOS 14.3 + Xcode 15.4（Swift 5.10）**。
 > 上游在 1.11.0 之前重写过全部历史（见「上游重写过历史」），旧 hash `abccf0e` 已不在 upstream；
-> **这一轮没有重写**：rebase 前跑 `git merge-base main upstream/main` 有值，就是上轮的基点 `07ba1db`。
+> **这一轮没有重写**：rebase 前 `git merge-base main upstream/main` 有值，正是上轮的基点 `bcb2889`。
+> **上一轮（1.22.0）当时只做了 rebase、没有记账**——`0083369`(1.19.0) → `bcb2889`(1.22.0) 那 91 个提交
+> 的复核这次一并补上（见「rebase 流程与验证基线」的 1.22.0 段）；这次 rebase 的对象是 1.22.0 → 1.23.0。
 > 每次 rebase 后请更新这一行和文中已过期的结论（见末尾「维护」）。
 
 ## 目录
@@ -83,6 +87,9 @@ done
 1.15.0 → 1.16.0（68 个提交）复核：**仍然没有重写**，输出 `ec1a7e3`（上轮的基点）。
 1.16.0 → 1.18.0（174 个提交）复核：**仍然没有重写**，输出 `784985e`（上轮的基点）。
 1.18.0 → 1.19.0（3 个提交）复核：**仍然没有重写**，输出 `07ba1db`（上轮的基点）。
+1.19.0 → 1.22.0（91 个提交）复核：**仍然没有重写**——`0083369` 是 `bcb2889` 的祖先
+（`git merge-base --is-ancestor 0083369 bcb2889` 为真）。这一轮当时没记账，但历史连续性可以事后确认。
+1.22.0 → 1.23.0（61 个提交）复核：**仍然没有重写**，输出 `bcb2889`（上轮的基点）。
 所以**下次先跑这一条判断**：有输出就走普通 rebase / `--onto` 都行，输出为空才需要去比对 tree。
 
 ## rebase 流程与验证基线
@@ -176,14 +183,136 @@ upstream（fork 改的那个 struct 已经不存在），后者取 upstream 的�
 `MoveGrip.glassDots` 与**全新文件** `Sources/Features/UpdateCard.swift`，后者不产生冲突、只在编译期暴露，
 见「旧工具链编译错误的常见形态」。**本轮没有穷尽 switch、没有旧 Foundation 的格式断言**，所以只这一笔。
 
-macOS 14.3 + Xcode 15.4 上的实测基线：**2038 个测试通过、11 个跳过、0 失败**（1.10.0 是 1387，
-1.11.0 首发 1531/4，1.11.0 同步后 1566/5，1.12.0 1575/5，1.13.1 是 1603/5，1.15.0 是 1666/5，
-1.16.0 是 1736/8，1.18.0 是 2038/11，本轮 2051/11）。
-11 个跳过是 **6 个 opt-in live check**（Devin、LM Studio、Ollama，加本轮新增的 Amp、Apify 和
+1.22.0 这轮（**91 个提交、跨三个发布**——1.20.0「cost per project, and figures that keep up」、
+1.21.0「Anthropic and Gemini endpoints, llama.cpp's speed, Antigravity without the IDE」、
+1.22.0「Qoder, more than one Command Code account, DeepSeek's funded wallet」；命令：
+`git rebase --onto upstream/main 0083369 main`——**当时只做了 rebase、没有记账**，这几行是事后从
+`git reflog main` 与 `range-diff` 反推的，`backup/pre-rebase-1.22.0` = `8ccbfd7` 仍在）。那 91 个提交
+把 1.19.0 推到 **1.22.0 (24)**；upstream 端除三个发布标题说的那些，还有：设置页齿轮改成几何绘制、
+把 notch 的「六颗点」拖拽整套落地
+（`CornerPassage`）、菜单栏条目按内容取宽、cost per project 与 Activity 窗口、Linux 端口、Windows 端的
+Watch/Critical 滑杆与虚线周环、Abacus.AI 的 custom-endpoint 预设、**`qoder` 这个新的 `WebSessionProvider`**，
+以及 **Command Code 支持多账号**（`commandCodeProfiles`）。**4 个 fork 提交变了形**（复现命令：
+`git range-diff 0083369..backup/pre-rebase-1.22.0 bcb2889..11a7bc9`）：① SDK shim 那笔被 upstream 新加的
+`NSAppTransportSecurity` 挤动（它插在 fork 改的 `LSMinimumSystemVersion` 下面，见第 1 / 4 节的冲突热点）；
+② XyToken 注册那笔的 `webProviders` / `signInItems` 两个字面量跟着 upstream 的 `qoder` 各加一项 →
+`[deepSeek, qianwen, qoder, xytoken]` 与 `[deepSeek, miniMaxWeb, qianwen, qoder, xytoken]`（见第 5 节）；
+③ Kimi 续期那笔只重排了 `KimiProvider` 的文档注释，语义未变；④ provider 链那笔因为 upstream 新增
+`commandCodeProfiles` 多起了一句 `allProviders += commandCodeProfiles.map { CommandCodeProvider(profile: $0) as UsageProvider }`。
+其余 24 个 fork 提交干净落地。**这一轮没有留下 `Fix old-toolchain fallout` 提交，也没有 `make test` /
+`Scripts/install-app.sh` 的任何记录**——所以 1.22.0 的编译与测试状态在 1.23.0 之前是**未证实**的；
+下面的逐节复核段因此按当前现状写，一次覆盖 1.22.0 与 1.23.0 两轮 upstream 改动。
+
+1.23.0 这轮（**61 个提交**，命令：`git rebase --onto upstream/main bcb2889 main`）。**4 个文件冲突、停三次**：
+① `Sources/Notch/NotchRootView.swift`——upstream 在 `if glassy` 里又套了一层 `if #available(macOS 26.0, *)`，
+同时把样式来源从 `model.surfaceStyle` 改名成 `model.drawnSurfaceStyle`、条件收紧成 `if glassy && !dock`；fork 那笔
+fallout 照第 1 节的形态处理：删掉 `#available` 包装、只把调用换成 `compatGlassEffect(model.drawnSurfaceStyle, in: Rectangle())`，
+**保留 upstream 的新条件与 `headlessGlass` 的 if/else 两层结构**；
+② `Sources/Settings/NotchSurfaceStyle.swift`——upstream 新增 `var slabGlass: Glass`、在 `glass` 的 switch 里加了
+`.dock`、还新写了一段「`dock` 取 `.regular`」的文档，正好压在 fork 的 `#if swift(>=6.2)` 与它的说明之间 →
+文档两边都留，`#if` 继续包住 `glass` **和新的 `slabGlass`**；
+③ `Tests/NotchLayoutTests.swift`——upstream 给同一个测试补了 `dock` 的说明并加了 `.dock` 断言 → 取 upstream 的
+说明与断言，`#if swift(>=6.2)` 门禁照旧；
+④ `Sources/App/AppDelegate.swift` 的 provider 链——upstream 拆出 `remoteProviders`、往链里加了
+`GrokBotProvider()` / `MuseLocalProvider()` / `OMLXLocalProvider(endpoint: preferences.omlxEndpoint)` →
+保留 fork 的 `+=` 结构与 upstream 的 provider 集合、顺序，`remoteProviders` 在末尾单起一句。
+其余 23 个 fork 提交干净落地；`TooltipCard` / `UsageResetCard` / `SettingsHandle` / `MoveHandle` / `UpdateCard` /
+`SettingsView` / `UsageStore` / `NotchRenderTests` / `UsageBandTests` / `project.yml` 全部自动合并成功。
+`git range-diff bcb2889..backup/pre-rebase-1.23.0 upstream/main..main` 只有那四笔显示内容差异（`Tests/NotchLayoutTests`
+那笔被标成 `<`，是 range-diff 按 patch 上下文配不上，`--stat` 与内容都是同一件事）。
+**本轮 3 处旧工具链 fallout，合成一笔**（沙箱里第一次真正跑到编译器之后才齐的，见下）：
+① Dock 样式的浮起玻璃板——`model.drawnSurfaceStyle.slabGlass` 与 `NotchSurfaceStyle.slabGlass` 都是新符号，
+前者落在**非冲突区**、后者与 `.dock` 一起落在自动合并的地方，只有编译期才暴露 → 给 shim 加了 `slab:` 开关；
+② `Sources/Sessions/OMLXMetrics.swift`（**1.23.0 全新文件**，不经过冲突）——`Task.detached { [weak self] in … await
+MainActor.run { guard let self … } }`，Swift 5.10 报 `reference to captured var 'self' in concurrently-executing code`
+→ 内层闭包补 `[weak self]`（同 `LMStudioMetrics` 的形态）；
+③ `Tests/RemoteHostsTests.swift`（**1.23.0 全新测试**）——7 处 `var loads/renewals/commands` 被并发闭包捕获，
+报 `mutation of captured var … in concurrently-executing code` → 换 `final class Box`（同 `ClaudeOAuthProviderTests`）。
+**这三处都不在冲突清单里**：②③ 是新文件，① 是非冲突区段——和 1.19.0 的 `UpdateCard` 是同一类盲点，只有
+`make build` 才会报。
+
+macOS 14.3 + Xcode 15.4 上的实测基线（**最后一组真实数字来自 1.19.0 那轮**）：**2051 个测试通过、11 个跳过、0 失败**
+（1.10.0 是 1387，1.11.0 首发 1531/4，1.11.0 同步后 1566/5，1.12.0 1575/5，1.13.1 是 1603/5，1.15.0 是 1666/5，
+1.16.0 是 1736/8，1.18.0 是 2038/11，1.19.0 是 2051/11）。**1.22.0 与 1.23.0 这两轮没有实测记录**，原因见下。
+11 个跳过是 **6 个 opt-in live check**（Devin、LM Studio、Ollama、Amp、Apify 和
 `TooltipRenderTests.testLiveClaudeResetCard`）加 **5 个玻璃测试**（`NotchRenderTests` 2 个 +
-`UsageBandTests` 的 `PaletteAppearanceTests` 3 个，见第 7 节）——**玻璃那 5 个一个没变**，本轮多出来的
+`UsageBandTests` 的 `PaletteAppearanceTests` 3 个，见第 7 节）——**玻璃那 5 个一直没有变**，1.19.0 多出来的
 3 个全是 live check，不是新的适配。测试总数会随 upstream 增长——整文件新增（`FullScreenAutoFoldTests`、
-`SpinningArcTests` 这类）是常见来源——**要盯的是「0 failures」，不是具体数字**。
+`SpinningArcTests`、本轮 oMLX / Muse / RemoteHost 那几组）是常见来源——**要盯的是「0 failures」，不是具体数字**。
+**这一轮的编译是在 pi-sandbox 里跑通的，测试跑不了**——这件事本身值得单独记，因为踩了六个坑、每个都不是改路径能解决的。
+先说要放行什么（`~/.pi/agent/sandbox.json`，本机现状，`--reload` 或重启 pi 后生效）：
+
+```jsonc
+{
+  "permissionPromptTimeoutSeconds": 0,   // 可选：构建中途被 600s 提示超时打断很难受
+  "allowPty": true,                      // 否则 xcodebuild 报 Pseudo Terminal Setup Error
+  "filesystem": {
+    "allowWrite": [
+      "/private/var/folders", "/var/folders",              // Foundation 的 confstr 临时目录（忽略 TMPDIR）
+      "~/Library/Developer/Xcode/DerivedData",             // DerivedData / LogStore / ModuleCache / SourcePackages
+      "~/Library/Caches/org.swift.swiftpm",                // SPM 缓存（离线解析靠它）
+      "~/Library/Preferences", "~/Library/Application Support",  // 测试宿主 App 的 UserDefaults 与数据目录
+      "/Applications"
+    ]
+  },
+  "network": {
+    "allowMachLookup": [
+      "com.apple.FileCoordination", "com.apple.ProgressReporting",
+      "com.apple.testmanagerd", "com.apple.testmanagerd.control", "com.apple.dt.xctestd.target",
+      "com.apple.CARenderServer", "com.apple.windowserver.active", "com.apple.windowserver",
+      "com.apple.CoreDisplay.master", "com.apple.cfprefsd.agent", "com.apple.cfprefsd.daemon",
+      "com.apple.lsd.open", "com.apple.lsd.modifydb", "com.apple.tccd", "com.apple.trustd.agent"
+    ]
+  }
+}
+```
+
+六个坑，按踩到的顺序：
+1. **`com.apple.FileCoordination` 不给，任何目录的原子写都失败**：`Foundation` 的 `NSData.writeToFile:options:.atomic`
+   走 `NSFileCoordinator`，服务不在白名单时在**工作区、`/tmp` 里都报 EPERM**（`xcodegen` 写 `project.pbxproj`、
+   `xcodebuild` 写 `LogStoreManifest.plist` 就是这么栽的）。这条最容易误判成「路径没放行」。
+2. **SwiftPM 的 manifest 沙箱要嵌套 `sandbox-exec`，而嵌套在 pi-sandbox 里必然失败**
+   （`sandbox-exec: sandbox_apply: Operation not permitted`，`enableWeakerNestedSandbox` 在 macOS 上是空操作）。
+   绕法是把 SwiftPM 的 manifest 沙箱关掉：`defaults write xcodebuild IDEPackageSupportDisableManifestSandbox -bool YES`
+   （撤销：`defaults delete xcodebuild IDEPackageSupportDisableManifestSandbox`）。`XBS_DISABLE_SANDBOXED_BUILDS=1`
+   同时带上——它管的是 xcbuild 的**构建**沙箱，同样要嵌套 `sandbox-exec`。
+3. **`Pseudo Terminal Setup Error`** → `allowPty: true`（runtime 会补 `(allow pseudo-tty)` 与 `/dev/ptmx`、`/dev/ttys*`）。
+4. **`Sparkle.xcframework` 缺失**：SwiftPM 那次解包只写了一半（`artifacts/sparkle/Sparkle/` 里有 `bin/`、`LICENSE`，
+   没有 xcframework），而它认这个状态、不会重解包。手动从 `~/Library/Caches/org.swift.swiftpm/artifacts/` 里那份官方
+   zip `unzip` 进去即可。
+5. **测试执行要 LaunchServices**：`xcodebuild test` 用 `IDELaunchServicesLauncher` 启动测试宿主，沙箱里报
+   `-10822 kLSServerCommunicationErr`。该路径需要 `(allow lsopen)`，runtime 把它和 `coreservicesd`、
+   quarantine-resolver 一起挂在 `allowAppleEvents` 下，而 **pi-sandbox 没有透传这个键**（只透传
+   `allowPty` / `allowBrowserProcess` / `enableWeakerNestedSandbox` 等）——所以 **`make test` 没法在沙箱里跑**，
+   除非去改 `~/.pi/agent/npm/node_modules/pi-sandbox/src/sandbox-runtime.ts` 加一行 `allowAppleEvents: config.allowAppleEvents,`
+   （改 node_modules，`pi`/npm 升级会冲掉）。
+6. 顺带：`log` 在沙箱里直接拒绝运行（`log: Cannot run while sandboxed`），所以**沙箱违规没法用 `log stream` 自证**——
+   只能靠报错文案反推（`-10822`、`Error 159 - Sandbox restriction`、`Operation not permitted`）。
+
+于是沙箱内能守住的验证上限是：
+
+```sh
+# 1) 完整构建（含 xcodegen、Debug 编译、DEV_RESIGN）：实测 exit 0、** BUILD SUCCEEDED **
+XBS_DISABLE_SANDBOXED_BUILDS=1 make build
+
+# 2) 测试包编译（抓 fallout 用这个最省：不跑测试，只编 app + 测试目标）
+XBS_DISABLE_SANDBOXED_BUILDS=1 xcodebuild -project Codenotch.xcodeproj -scheme Codenotch \
+  -destination 'platform=macOS,arch=arm64' -configuration Debug \
+  CODE_SIGN_IDENTITY=- DEVELOPMENT_TEAM= CODE_SIGN_STYLE=Automatic build-for-testing
+# 期望 ** TEST BUILD SUCCEEDED **（1.23.0 这轮就是这样跑绿的，抓到了本轮 3 处 fallout）
+```
+
+**测试本身要在沙箱外的终端跑**（`make test` 会在这里停在 `-10822`）：
+
+```sh
+make test                 # 期望 0 failures
+Scripts/install-app.sh    # 装到 /Applications，并确认进程真的起来
+```
+
+**在把数字补进上一段之前，1.22.0 / 1.23.0 的「0 failures」都是未证实的。** 尤其盯两类只在 `make test` 现形的东西：
+upstream 的 CI 跑在 **`macos-26`**（`.github/workflows/ci.yml` 的 `runs-on`），它的格式化/百分比断言在旧 Foundation
+上可能算出别的字符串（1.18.0 的 `ApifyUsage.money` 就是这样）；本轮新增的 oMLX / Muse / RemoteHost / GrokBot
+测试里也有同一类断言。
 1.13.1 这轮 `Scripts/install-app.sh` 装出 **1.13.1 (16)**、ad-hoc 签名，`/Applications` 那个进程正常起来。
 1.15.0 这轮 `Scripts/install-app.sh` 装出 **1.15.0 (18)**、ad-hoc 签名，`/Applications` 那个进程正常起来；
 实测回读那份 plist：`LSMinimumSystemVersion` = 14.3、`SU*` 三项为 false / false / 空（见第 4 节）。
@@ -202,6 +331,10 @@ macOS 14.3 + Xcode 15.4 上的实测基线：**2038 个测试通过、11 个跳�
 hardened runtime 位，`codesign -dv` 只印 `flags=0x2(adhoc)`）。实测回读那份 plist：`LSMinimumSystemVersion` = 14.3、
 `SU*` 三项为 false / false / 空（见第 4 节）。
 
+1.22.0 / 1.23.0 的安装验证：**待补**——这两轮没在沙箱内装过（原因见上），`Scripts/install-app.sh` 与
+plist 回读（`LSMinimumSystemVersion` = 14.3、`SU*` 三项 false / false / 空）要和 `make test` 一起在沙箱外跑完再填。
+特别值得回读一眼的是 1.23.0 的 Dock 样式：它是本轮唯一新加的玻璃表面，沙箱里只做了「调用点全部走 shim」的静态核对。
+
 ## 1. macOS 14.3 部署目标与 SDK shim
 
 **为什么存在**：见上。upstream 的 `deploymentTarget` 是 15.0，本机要在 14.3 上跑。
@@ -211,12 +344,15 @@ hardened runtime 位，`codesign -dv` 只印 `flags=0x2(adhoc)`）。实测回�
 - `project.yml`：`deploymentTarget: 14.3`、`projectFormat: xcode15_0`
 - `Sources/Info.plist`：`LSMinimumSystemVersion` = 14.3
 - `Sources/Compatibility/MacOS26Shims.swift`：`compatGlassEffect(_ style: NotchSurfaceStyle,
-  in:interactive:)`、`compatPointerStyle(active:)`
-- `Sources/Settings/NotchSurfaceStyle.swift`：`var glass: Glass` 连同它的文档整段在
-  `#if swift(>=6.2)` 里（理由见下）
+  in:interactive:slab:)`、`compatPointerStyle(active:)`。`slab:` 是 1.23.0 加的，对应 upstream 的
+  `slabGlass`（Dock 样式浮起那块玻璃板），见下
+- `Sources/Settings/NotchSurfaceStyle.swift`：`var glass: Glass` **与 `var slabGlass: Glass`（1.23.0 起）**连同
+  它们的文档整段在 `#if swift(>=6.2)` 里（理由见下）
 - `Tests/NotchLayoutTests.swift`：唯一比较 `glass` 值的那个测试同样在 `#if swift(>=6.2)` 里
-- 调用点（1.19.0 起）：`SettingsView`（2）、`NotchRootView`、`MoveHandle`、`SettingsHandle`（2）、`TooltipCard`、
-  `UsageResetCard`、`UpdateCard`
+- 调用点（1.23.0 起，**9 个 `compatGlassEffect` + 1 个 `compatPointerStyle`**，与 upstream 的
+  9 个 `glassEffect` + 1 个 `pointerStyle` 一一对应）：`SettingsView`（2：`glassBackground(in:)` 与
+  `AccountRow` 的指针）、`NotchRootView`（2：dock 的 slab 与 `notchCopy` 的面板）、`MoveHandle`、
+  `SettingsHandle`（2）、`TooltipCard`、`UsageResetCard`、`UpdateCard`
 
 **rebase 时怎么判断**：本机还在 macOS 14 / Xcode 15.4 上就留着。shim 用
 `#if swift(>=6.2)` 判断「这个工具链里有没有 macOS 26 SDK」（Xcode 26 = Swift 6.2，
@@ -237,6 +373,12 @@ Xcode 15.4 = 5.10）：新工具链编译真正的修饰符，旧工具链永远
 `Sources/Compatibility/MacOS26Shims.swift`**，调用点永远不写它。darkGlass 把这条逼了出来：
 upstream 从 `.glassEffect(.regular, …)` 改成 `.glassEffect(surfaceStyle.glass, …)`（`.regular`
 或 `.clear`），shim 若还把 `.regular` 写死，macOS 26 上 fork 的暗色玻璃就画错了。
+
+同一个理由也意味着**新属性同样要进 `#if`**：1.23.0 的 Dock 样式让 `NotchSurfaceStyle` 多了一个
+`var slabGlass: Glass`（`.clear.tint(Palette.dockGlassTint)`），它与 `glass` 用同一道门禁。调用点那边的
+写法也一样——**不写 `Glass`**：shim 因此多了一个 `slab: Bool = false` 参数，
+`compatGlassEffect(model.drawnSurfaceStyle, in: DockSlab(…), slab: true)` 读的是 `style.slabGlass`，
+而不是在调用点拼一个 `Glass` 值。加新变体时照这个形态扩参数，别把 `Glass` 泄回调用点。
 
 排查命令：
 
@@ -301,6 +443,19 @@ shim——不要像上一轮那样把整块压成一次调用，压掉就丢了 
 member 'glassEffect'`——这正是「新文件不冲突」那条盲点，见「旧工具链编译错误的常见形态」。
 `NotchSurfaceStyle.glass` 上游依旧只有 `@available`、没有自带门禁，fork 的 `#if swift(>=6.2)` 与 shim 原样需要。
 
+1.22.0 + 1.23.0 复核（一次跑完两轮，因为 1.22.0 那轮没记账）：grep 仍只剩注释与 shim 自身，调用点
+**9 + 1，与 upstream 一一对应**。两轮合计新增 **4 处**、删除 **2 处**、改名 **1 个来源**：
+① `MoveHandle` 那处随 1.22.0 的「六颗点」落成 `MoveGrip.glassDots`（已在 1.19.0 那轮处理完）；
+② 1.22.0 把 `surfaceStyle` 改名为 `drawnSurfaceStyle`（**只改名字**，shim 不看这个），`NotchRootView` 两处
+调用点跟着改名；③ 1.23.0 的 **Dock 样式**新增两处：`notchCopy` 之外多了一层「slab 玻璃」（
+`model.drawnSurfaceStyle.slabGlass` + `DockSlab`，落在**非冲突区**，见下）与 `NotchSurfaceStyle.slabGlass`；
+`if glassy` 的条件也跟着收紧成 `if glassy && !dock`（**取 upstream**，dock 的玻璃由 slab 那层负责）。
+④ 1.22.0 的 `SettingsView` 里 `pointerStyle` 与 `glassBackground(in:)` 都还在原位。
+`NotchSurfaceStyle.glass` / `slabGlass` 上游**依旧**只有 `@available`、没有自带门禁，fork 的 `#if swift(>=6.2)`
+与 shim 两处都还需要。**新增的 `#available` 包装仍要删**：1.23.0 给 `NotchRootView` 的两处玻璃
+（panel 与 slab）都套了 `if #available(macOS 26.0, *)`，fork 的形态是「删包装、换 `compat*`」，
+`headlessGlass` 的 if/else 结构与 `if glassy && !dock` 的条件都保留。
+
 ## 2. ad-hoc 签名、DEV_RESIGN 与安装路径
 
 **为什么存在**：本机没有证书时，`make` 的三个签名分支是
@@ -359,6 +514,14 @@ Sparkle.framework 这次真的进了进程（`vmmap` 能看到），说明本轮
 但是——既然 updater 现在会被起，而 fork 的 `SUFeedURL` 是空的，**下一轮若 upstream 再动 `AppDelegate` 的
 updater 启动，值得顺手看一眼 `log stream` 里有没有 Sparkle 的报错**（本轮没看到异常）。
 
+1.22.0 + 1.23.0 复核：`Scripts/install-app.sh` 两轮都没进 upstream 的改动集；`Makefile` 只被 1.22.0 碰过
+（`make dmg` / `dmg-ci` 那一带，与 fork 的 `DEV_SIGN` / `DEV_RESIGN` / `install` 不相邻，自动合并干净），
+1.23.0 完全没碰。格局原样，**但这两轮的装机和进程启动都还没验过**——沙箱里跑不了
+`Scripts/install-app.sh`（要写 `/Applications` 与 `$HOME`），见「rebase 流程与验证基线」里那段说明。
+装机时顺手要看的还是那条老经验的反面：1.19.0 起 updater 在启动时就起，fork 的 `SUFeedURL` 是空的，
+所以 1.23.0 新增的「在 notch 里问 Update / Later」（`UpdateCard`）在 fork 里应当**完全不可达**——装上以后
+若看到那个红点或更新卡，说明 `SUFeedURL` / `SUEnableAutomaticChecks` 被谁改回去了（见第 4 节）。
+
 ## 3. SwiftNIO 固定在 2.86.x
 
 **为什么存在**：upstream 用 SwiftNIO 实现 phone link。**2.87.0 起要求 Swift 6.1 tools**，
@@ -404,6 +567,12 @@ SwiftPM 会跳过自己读不了的版本，所以 `from: "2.86.0"` 会落在 2.
 1.19.0 复核：同样的形态——只改版本号（`1.19.0` / `21`），`packages:` 段与 `Package.resolved` 都没进 upstream 的
 改动集（`git diff --name-only 07ba1db upstream/main -- Package.resolved` 为空），fork 的 `from: "2.86.0"` 与解析结果
 swift-nio **2.86.2**（`revision` `a18bddb0acf7`）原样落地。
+
+1.22.0 + 1.23.0 复核：`Package.resolved` **两轮都没进** upstream 的改动集
+（`git diff --name-only bcb2889 upstream/main -- Package.resolved` 为空）；`project.yml` 的 `packages:` 段也没动
+（diff 里没有该上下文行）。fork 的 `from: "2.86.0"` 与解析结果 swift-nio **2.86.2**（`revision` `a18bddb0acf7`）
+原样落地——不过这一轮**没在真机上解析过一次**：`make gen` 在沙箱里写不了临时目录，解析这一步要等
+沙箱外第一次 `make build` 才重新验证（若那时报 3 节顶部那条 tools-version 错，说明 pin 又被盖掉了）。
 
 ## 4. 关闭 Sparkle 自动更新
 
@@ -455,6 +624,13 @@ swift-nio **2.86.2**（`revision` `a18bddb0acf7`）原样落地。
 装出来的 1.19.0 实测回读：`LSMinimumSystemVersion` = 14.3、`SUFeedURL` 为空、
 `SUEnableAutomaticChecks` / `SUAutomaticallyUpdate` 均为 false。
 
+1.22.0 + 1.23.0 复核：**`SU*` 三行两轮都没进 upstream 的改动集**——1.22.0 动过 `Sources/Info.plist`（新加
+`NSAppTransportSecurity`，插在 fork 改的 `LSMinimumSystemVersion` 下方，只挤动了上下文，`SU*` 没碰），
+1.23.0 **完全没碰** `Sources/Info.plist`（`git diff --name-only bcb2889 upstream/main -- Sources/Info.plist` 为空）。
+`project.yml` 这边，1.22.0 只碰版本号，1.23.0 同样只碰版本号（`1.23.0` / `25`），fork 的
+`SUEnableAutomaticChecks: false` + `SUFeedURL: ""` + 那段注释原样落地。所以上一段那句「下轮这里会更干净」
+成立：这一轮 `SU*` 段**一次都没冲突**，只剩两键要压。装机验证待补（见「rebase 流程与验证基线」）。
+
 ## 5. XyToken provider（fork 独有功能）
 
 **为什么存在**：XyToken 的用量在网页会话里，refresh cookie 是 HttpOnly 且每次调用都轮换，
@@ -477,6 +653,11 @@ upstream 新增或改动这类配置时，**回来检查 xytoken 是否也要同
 - 依赖 `weeklyID` 的（xytoken 声明它之前一律**静默不生效**）：「每周圆环」（内/外，`preferences.weeklyRing`）、
   「虚线每周圆环」、「圆环读数含每周」、「每周限额作为主圆环」，以及 `UsageLimitWatcher` 的周限额提醒
   （开关在设置-通知里：`announceWeeklyLimitReached`）；
+- 依赖「窗口到没到顶」的（1.23.0 新增，读 `headline` 与 `weeklyLimitWindow` 的 `usedFraction`，
+  **同样要那两个角色**）：`shutRingsWhenSpent`（任一窗口耗尽就把两个环都关掉，默认开）、
+  `hideDepletedAccounts`（`ProviderSnapshot.isDepleted`，默认关）——xytoken 两个角色都声明了，**无需再加**；
+- 对所有 provider 通用、只读窗口自身数值、与角色声明无关：1.23.0 的 `showsRemainingInNotch`（读剩余而非已用）
+  与 `autoOrderByRemaining`（按剩余排序）、`busyIndicatorStyle`（工作指示器动画）；
 - **菜单栏「显示每周限额」对 xytoken 结构性不适用**：`StatusItemSummary.canSummarise` 要求 5 小时窗口
   或 Claude/Codex（`isFiveHourFamily`），xytoken 的 day / week 都不满足——声明 `weeklyID` 只是前向兼容，
   哪天菜单栏放宽这条限制它才会自动可用；
@@ -535,6 +716,19 @@ upstream 单独加，与 fork 不相邻，自动合并干净）。
 `fleet.signInItems = [deepSeek, miniMaxWeb, qianwen, xytoken]`、`xytoken` 的构造。`AppDelegate.swift` 本轮 upstream 改了
 （updater 改成启动时就起），但落在 `applicationDidFinishLaunching` 那段，与注册不同区段——fork 侧只剩那三处
 加上 `+=` 拆解，`git diff upstream/main HEAD -- Sources/App/AppDelegate.swift` 一眼可核。
+
+1.22.0 复核：upstream 这轮**碰了** `AppDelegate`（`qoder` 这个新的 `WebSessionProvider`），`Sites.swift` 没碰
+（`git diff --name-only 0083369 bcb2889 -- Sources/Providers/Sites.swift` 为空）。注册两处跟着 upstream 各加一项：
+`let webProviders: [WebSessionProvider] = [deepSeek, qianwen, qoder, xytoken]`、
+`fleet.signInItems = [deepSeek, miniMaxWeb, qianwen, qoder, xytoken]`；`qoder` 的 `onAuthenticated` 与
+`preferences.$qoderRegion` 两个 sink 是 upstream 自己加的，与 fork 不相邻，自动合并干净。
+1.23.0 复核：upstream 这轮**没碰** `Sites.swift`，两处注册原样（`[deepSeek, qianwen, qoder, xytoken]` 与
+`[deepSeek, miniMaxWeb, qianwen, qoder, xytoken]`）。`AppDelegate` 这轮的真冲突是 provider 链（见上一段与
+「冲突热点」），与注册不同区段。**本轮新增的 provider 与 fork 无关**：`MuseLocalProvider`、`OMLXLocalProvider`
+是 `UsageProvider`（各有自己的 endpoint 设置），远程主机那条是 `preferences.remoteHosts.map { $0.makeProvider() }`
+（`RemoteClaudeProvider` / `RemoteCodexProvider`，走 SSH）——都不是 `WebSessionProvider`，`webProviders` 不用动。
+「外观配置同步规则」照上面的清单看过一遍：1.23.0 的四个新开关里有两个要窗口角色，xytoken 两个角色都已声明，
+**本轮不需要给 xytoken 补任何声明**。
 
 本节本地演进（**非 rebase**）：给 `static let xytoken` 补上窗口角色 `headlineID: "day:1"` /
 `weeklyID: "week:1"`，使外观面板里依赖 `weeklyID` 的那组配置（每周圆环、虚线每周圆环、圆环读数含每周、
@@ -612,6 +806,20 @@ upstream 本轮**没有再给 `SignInRoute` 加 case**（仍是 1.18.0 那四个
 所以 fork 的穷尽 switch 原样编过——本轮没有这一形态的 fallout。**穷尽 switch 是每轮都要过的关**：
 `UsageStore` 与 `ProviderAccount` 本轮都没进 upstream 的改动集，但下一轮很可能进，别因为连着没事就放宽这条判据。
 
+1.22.0 + 1.23.0 复核仍是**上游没修**：`grep -rn 'needsSignIn\b' Sources/` 命中的仍是 fork 的三处
+（`ProviderAccount.needsSignIn` 的声明、`UsageStore.needsSignIn(_:account:)` 与调用点、`SettingsView` 的两处读取），
+upstream 侧只有 `needsSignInRenewal`。两轮都**没有**再给 `SignInRoute` 加 case（仍是 `.modal` / `.openApp` /
+`.guidance` / `.command` 四个），所以 fork 的穷尽 switch 原样成立——**但这条判据这一轮没能靠编译器确认**
+（沙箱里编不了），下次在沙箱外 `make build` 时留意 `switch must be exhaustive` 就是这一形态的复发。
+`UsageStore.swift` 1.22.0/1.23.0 都进过 upstream 的改动集（1.22.0 的 `ProviderSummary` 一带、1.23.0 的
+`ResetCopy` 格式化器缓存），但都自动合并干净；`ProviderAccount.swift` 两轮都没进。
+**1.23.0 新增 provider 的归类核对**（每个都自己声明 `signInRoute`，照上面的判据逐个看）：
+`GrokBotProvider` / `MuseLocalProvider` 是 `.guidance`、远程那两个（`ClaudeRemoteProvider` / `CodexRemoteProvider`，
+经 SSH）也是 `.guidance`，四个**都实现了 `account()`**，与 `.openApp, .guidance, .command` 归 true 那支自洽；
+`OMLXLocalProvider` 是 `.openApp` 但**没有 `account()`**，于是它会一直显示登录提示——**这与 upstream 自己的行为一致**
+（upstream 在 `account == nil` 时同样摆出登录引导），fork 的归类没有让它更糟，所以不必改。哪天 upstream 给 OMLX 补上
+`account()`，这里就自然恢复正常。
+
 ## 7. 玻璃样式测试在 macOS 26 以下跳过
 
 **为什么存在**：upstream 新增的 `NotchRenderTests.testTheFoldedPillIsTransparentInTheGlassStyle`
@@ -659,6 +867,16 @@ macOS 26），所以在旧系统上必然红。**这三个门禁不是 fork 的�
 upstream **依旧没有门禁**（`git show upstream/main:Tests/UsageBandTests.swift` 里 grep 不到 `glassAvailable`），
 所以本地那三行照旧需要。实测跳过从 8 变成 11，但**多出来的 3 个全是 opt-in live check**（本轮新增的 Amp、
 Apify 与 `testLiveClaudeResetCard`），玻璃那 5 个一个没变——本轮没有新的适配要加。
+
+1.22.0 + 1.23.0 复核：upstream 两轮都动过这两个测试文件，但**门禁一处都没被碰**，fork 的 4 行
+`XCTSkipUnless`（`NotchRenderTests` 1 + `UsageBandTests` 3）自动合并干净、继续留；
+`testTheFoldedPillIsTransparentInTheGlassStyle` 在 upstream 1.23.0 里**仍然没有门禁**（仍是 `func …()`、无 `throws`）。
+**1.23.0 有一处新变化要记**：`UsageBandTests` 里现在出现了 `if NotchSurfaceStyle.glassAvailable { … }`——那是**另一个**
+测试里内联包住 `.dock` 那一段断言用的，不是给我们这三个测试加门禁
+（`git show upstream/main:Tests/UsageBandTests.swift | grep -c glassAvailable` 是 1，不是 3），所以**本地那三行照旧需要**。
+跳过的数量这一轮**没法在沙箱里实测**——测试执行要在 LaunchServices 下启动宿主，沙箱里过不去
+（`-10822`，见「rebase 流程与验证基线」）。按 upstream 新增的测试文件（oMLX / Muse / RemoteHost / GrokBot 几组）
+推测只增不减，但要按「0 failures、玻璃仍是 5 个」的标准在沙箱外核对。
 
 ## 8. Kimi OAuth token 自主续期
 
@@ -761,6 +979,19 @@ upstream/main | grep -i kimi` 为空），信号 grep 仍只命中 fork 的 `Kim
 为空）——`KimiProvider` 因此自动合并干净，`fetchSnapshot()` 里那句 `refresher.usableCredential()` 原样在页，
 这一整笔继续留着。
 
+1.22.0 复核：**上游仍未修**。`KimiProvider.swift` / `KimiCredentials.swift` 都进了 upstream 那 91 个提交的改动集，
+但都不是续期这件事：`KimiProvider` 改的是文档注释（fork 那笔把它重写过，两边的措辞不同 → 该笔因此"变了形"，
+见「rebase 流程与验证基线」的 1.22.0 段），`KimiCredentials` 一侧仍只有读、没有写。`fetchSnapshot()` 里那句
+`refresher.usableCredential()`（现在在第 44 行）原样在页。
+1.23.0 复核：**上游仍未修**，而且这轮**一个 Kimi 文件都没碰**（`git diff --name-only bcb2889 upstream/main | grep -i kimi`
+为空）——`KimiProvider` 自动合并干净，那一整笔继续留着。
+**信号 grep 的基线这一轮变了**，记下来免得下次误判：`grep -rn "oauth/token\|refresh_token" Sources/Providers/`
+现在**除了 fork 的两个文件还会命中 upstream 自己的 `GrokLocalProvider.swift` 与 `GrokCredentials.swift`**——
+1.23.0 让 Grok 第一次拿到「access token 过期就自己刷新」的能力。但它**只在内存里**用新 token
+（`renewed = (minted.accessToken, minted.expiresAt, refreshToken)`，没有写回任何文件、也没动 `~/.grok` 下的凭证），
+与 fork 的 Kimi 做法（照着 CLI 的私有协议**写回**、还要抢 CLI 的锁）不是一回事。所以信号 grep 要按文件看：
+**上游若开始往 Kimi 的凭证文件里写、或在 401 后重取，才算它修了同一件事**；Grok 命中不算。
+
 ## 冲突热点（真实踩到过的）
 
 | 位置 | 现象 | 处理 |
@@ -768,7 +999,7 @@ upstream/main | grep -i kimi` 为空），信号 grep 仍只命中 fork 的 `Kim
 | 整个仓库 | upstream 重写了全部 commit（hash 全变），没有共同祖先 | 见「上游重写过历史」：用 `--onto`，别用 `git rebase upstream/main` |
 | `ProviderGlyph.swift` / `GlyphOutline.swift` | git **自动合并成功**，但 enum 出现重复的 `case kimi` / `static let kimi` | 回退到 upstream 版本 |
 | `README.md` | 同上：表格行重复 | 回退到 upstream 版本 |
-| `AppDelegate.swift` 的 provider 组装 | 它被 upstream 反复重构，且**几乎每轮都往链里加 provider**：1.15.0 加 `qianwen`（与 fork 的 `xytoken` 落在同一个列表字面量）、1.16.0 加 `customProviders`、1.18.0 加 `AmpProvider()` / `ApifyProvider()` / `KiloProvider()`（正落在 fork 1.16.0 拆成 `+=` 的那条链中间） | 保留 upstream 的 provider 集合与顺序，fork 只保留「一句一个 `+=`」的形态：新 provider 按 upstream 的位置各起一句并显式 `as UsageProvider`；`webProviders` / `signInItems` 里把 XyToken 加回去（`[deepSeek, qianwen, xytoken]`），见第 5 节 |
+| `AppDelegate.swift` 的 provider 组装 | 它被 upstream 反复重构，且**几乎每轮都往链里加 provider**：1.15.0 加 `qianwen`（与 fork 的 `xytoken` 落在同一个列表字面量）、1.16.0 加 `customProviders`、1.18.0 加 `AmpProvider()` / `ApifyProvider()` / `KiloProvider()`（正落在 fork 1.16.0 拆成 `+=` 的那条链中间）、1.22.0 加 `qoder`（同样是 `WebSessionProvider`）与 `commandCodeProfiles`、1.23.0 加 `remoteProviders` / `GrokBotProvider()` / `MuseLocalProvider()` / `OMLXLocalProvider(…)` | 保留 upstream 的 provider 集合与顺序，fork 只保留「一句一个 `+=`」的形态：新 provider 按 upstream 的位置各起一句并显式 `as UsageProvider`；`webProviders` / `signInItems` 里把 XyToken 加回去（1.23.0 起是 `[deepSeek, qianwen, qoder, xytoken]`），见第 5 节 |
 | `Sites.swift` | 两个相邻的 site 定义 | 见第 5 节 |
 | `UsageStore.swift` 的 `ProviderSummary` 构造 | upstream 1.16.0 加了 `customIconFilename:`，正好落在 fork「读一次 `account()` + `needsSignIn:`」那一段中间 | 两边都留：upstream 的新参数 + fork 的共享 `account` 变量与 `needsSignIn:`，顺序按 `ProviderSummary` 声明，见第 6 节 |
 | `UsageStore.swift` 的 `needsSignIn` switch | upstream 给 `SignInRoute` 加 case（1.18.0 的 `.command`），而 fork 的 switch 穷尽、没有 `default` → **自动合并干净、没有任何冲突标记，但 `make build` 报 `switch must be exhaustive`** | 新 case 按第 6 节的判据归类：借用本地凭证的（`.openApp` / `.guidance` / `.command`）返回 true，只有 `.modal` 看 `snapshotStatus == .needsAuth` |
@@ -784,6 +1015,11 @@ upstream/main | grep -i kimi` 为空），信号 grep 仍只命中 fork 的 `Kim
 | `MoveHandle.swift` | upstream 1.19.0 把整个 `struct MoveHandle` 换成 `enum MoveHandle`（只剩两面弧共用的几何）**加** `MoveGrip`（六颗点的整套绘制），fork 那笔 shim 改的 `restingArc` / `hoverDisc` 正好是被删掉的两个成员 | **整块取 upstream**：不要试图把 fork 的旧代码搬回来（`arcRadius` / `restingTrim` 在 `MoveGrip` 里已不存在）。新代码里的 `glassDots` 才是需要 shim 的地方，算「旧工具链 fallout」，见第 1 节 |
 | `SettingsHandle.swift` 的玻璃分支 | 同一段里 upstream 新增 `.mask { GooArc(…) }`（弧线改成跟着 flare 走，不再是 `clipShape(ArcBand(…))`），而 fork 在那里删的是 `#available` 包装、换的是调用 | 取 upstream 的新结构（`.mask { GooArc }`），只把 `glassEffect` 换成 `compatGlassEffect`——两者不是一回事，别把 `GooArc` 换回 `ArcBand` |
 | `project.yml` 的 `SU*` 段 | upstream 1.19.0 在 `SUEnableAutomaticChecks` 与 `SUAutomaticallyUpdate` 之间插了一段注释（正好落在 fork 那两行中间），并**顺手把 `SUAutomaticallyUpdate` 改成 `false`**（与 fork 同向） | `SUEnableAutomaticChecks` 取 fork 的 `false`、`SUFeedURL` 取空、注释取 upstream；`SUAutomaticallyUpdate` 现已两边一致、不必再动，见第 4 节 |
+| `NotchRootView.swift` 的两处玻璃（1.23.0） | upstream 在同一段里既加了 `if #available(macOS 26.0, *)`，又把 `surfaceStyle` 改名成 `drawnSurfaceStyle`、把条件收紧成 `if glassy && !dock`，还多画了一层 `slabGlass` 的 slab | 删掉 `#available` 包装、把两处调用换成 `compatGlassEffect(model.drawnSurfaceStyle, …)`（slab 那处传 `slab: true`）；**取 upstream 的 `if glassy && !dock` 与 `headlessGlass` 的 if/else 结构**，别把它们压平 |
+| `NotchSurfaceStyle.swift` 的 `#if` 边界（1.23.0） | upstream 新增 `slabGlass: Glass` 与 `.dock` 分支、并写了一段 `dock` 的文档，正好压在 fork 的 `#if swift(>=6.2)` 说明与门禁之间 | 文档两边都留；`#if` 继续包住 `glass` **和新的 `slabGlass`**（`#endif` 留在 `slabGlass` 之后），见第 1 节 |
+| `Info.plist` 的 `LSMinimumSystemVersion` 邻域（1.22.0） | upstream 新增 `NSAppTransportSecurity`（`100.64.0.0/10` 的例外域），插在 fork 改的 `LSMinimumSystemVersion` 正下方 | 取 upstream 的新字典、`LSMinimumSystemVersion` 保持 14.3——和 1.15.0 / 1.18.0 的 `CFBundleLocalizations` 是同一个形态 |
+| `Tests/NotchLayoutTests.swift` 的 `#if swift(>=6.2)`（1.23.0） | upstream 给同一个测试补了 `dock` 的说明并加了 `.dock` 断言 | 取 upstream 的说明与断言，门禁照旧（这个测试比较的是 `Glass` 值，旧 SDK 里那个**类型**都不存在） |
+| `KimiProvider.swift` 的文档注释（1.22.0） | upstream 重写了头部文档，fork 那笔也改过同一段 | 取 upstream 的措辞（fork 那笔只是重排文档），`fetchSnapshot()` 里那句 `refresher.usableCredential()` 原样保留，见第 8 节 |
 | **upstream 新增的文件**（1.19.0 的 `Sources/Features/UpdateCard.swift`） | **不产生任何冲突**：fork 从没碰过它，git 只把它加进来；但里面有 `glassEffect` 时编译直接红 | 不要在「冲突都解完了」时收工——解完冲突后重跑第 1 节那条 grep，再 `make build` |
 
 **教训**：`git rebase` 打出「Auto-merging」**不等于**没问题，而且有**三种**表现：
@@ -795,9 +1031,11 @@ upstream/main | grep -i kimi` 为空），信号 grep 仍只命中 fork 的 `Kim
    `SignInRoute.command` → `needsSignIn` 的穷尽 switch，`ApifyUsage.money` 在 `en_US_POSIX` 下的分组
    （这轮没有新增 macOS 26 API，所以「新 API」那条没触发）。
 
-3. **冲突清单里根本没有的新文件**：upstream 新增的文件不进任何冲突——1.19.0 的 `Sources/Features/UpdateCard.swift`
+3. **冲突清单里根本没有的新代码**：upstream 新增的文件不进任何冲突——1.19.0 的 `Sources/Features/UpdateCard.swift`
    被整份加进来，git 一句提示都没有，只有 `make build` 报 `value of type 'some View' has no member 'glassEffect'`。
-   所以第 1 节那条 grep 要在**解完冲突之后**再跑一遍，不要只在冲突文件里找。
+   1.23.0 把这条推广了一层：**新符号也可能落在「冲突文件里的非冲突区段」**——`MoveHandle` 那处早已如此，
+   这轮是 `NotchRootView.swift` 里 dock 的 slab（`model.drawnSurfaceStyle.slabGlass`，那个文件另有冲突，
+   但不在这一处）。所以第 1 节那条 grep 要在**解完冲突之后**再跑一遍，不要只在冲突文件里找。
 
 三种都**只有编译期和测试期才发现**，所以 rebase 之后必须 `make build` + `make test`，不能只确认
 「冲突都解完了」。
@@ -808,12 +1046,18 @@ upstream/main | grep -i kimi` 为空），信号 grep 仍只命中 fork 的 `Kim
 历史上出现过的形态：
 
 - **新 API**：macOS 26 才有的修饰符 → 走 `Sources/Compatibility/MacOS26Shims.swift`（见第 1 节）
+- **新属性，不只是新修饰符**（1.23.0 首次出现）：Dock 样式给 `NotchSurfaceStyle` 加了一个返回 `Glass` 的
+  `slabGlass`，于是「类型不存在」那条从**修饰符**扩到了**属性**——属性本身进 `#if swift(>=6.2)`，调用点则
+  给 shim 加参数（`slab: true`），**不要在调用点拼 `Glass`**（见第 1 节）。判据：`make build` 报
+  `cannot find 'slabGlass' in scope` 或 `cannot find type 'Glass' in scope`。
 - **Swift 5.10 的并发限制**：不能在嵌套的并发闭包（`Task {}`、`MainActor.run {}`）里读取
   捕获的 `weak self` 变量 → 在**外层**先绑定（见 `PhoneLinkServer`、`LMStudioMetrics`；1.15.0 的
   `GrokActivityMonitor.rescan` 是同一个形态，而且嵌套两层——`scanQueue.async` 里再套
   `DispatchQueue.main.async` + `MainActor.assumeIsolated`）
 - **actor 隔离**：upstream 声明为 isolated 的方法，5.10 下需要 `nonisolated`（见 `ClaudeTokenRefresher.run`）
-- **测试里的可变捕获**：`var` 被并发闭包捕获 → 换成 `final class Box`（见 `ClaudeOAuthProviderTests`）
+- **测试里的可变捕获**：`var` 被并发闭包捕获 → 换成 `final class Box`（见 `ClaudeOAuthProviderTests`；
+  1.23.0 的 `Tests/RemoteHostsTests.swift` 又是 7 处 `var loads/renewals/commands`，同样改成 `final class Box` +
+  `loads.value += 1`）。**整文件新增的测试也会踩**，不是只有改过的文件。
 - **类型推断差异**：字面量需要显式类型，例如 `[TimeInterval(18000), …]`（见 `OpenCodeUsageTests`）。
   5.10 不会把整数算术折叠成 `Double`，所以 `[5 * 3600, 7 * 86400]` 匹配不上 `[TimeInterval?]`，
   要写成 `[TimeInterval(5 * 3600), TimeInterval(7 * 86400)]`（1.11.0 的 `Tests/MiniMaxUsageTests.swift`）。
@@ -840,9 +1084,15 @@ upstream/main | grep -i kimi` 为空），信号 grep 仍只命中 fork 的 `Kim
   改断言——`formatter.groupingSize = 3`，这在「本来就按三位分组」的 locale 上是 no-op。**判断手法**：先看 upstream
   的 CI 跑在哪个 runner，再用一段独立的 `swift` 脚本在本机复现同一个 API 的行为（`swift /tmp/x.swift` 几秒钟就有
   答案），别凭猜。
-- **新文件里的新 API**：这一形态**不经过冲突**——1.19.0 的 `Sources/Features/UpdateCard.swift` 是 upstream 新增的
-  文件，rebase 时整份加进来、没有任何冲突标记，`make build` 才报 `value of type 'some View' has no member 'glassEffect'`。
+- **新文件 / 非冲突区段里的新 API**：这一形态**不经过冲突**——1.19.0 的 `Sources/Features/UpdateCard.swift` 是 upstream
+  新增的文件，rebase 时整份加进来、没有任何冲突标记，`make build` 才报 `value of type 'some View' has no member 'glassEffect'`；
+  1.23.0 的 dock slab 更进一步：它落在**有冲突的文件的非冲突区段**里（`NotchRootView.swift`）。
   对策：解完冲突后**重跑一遍第 1 节的 grep**，并按第 1 节的形态改（删 `#available` 包装、换 `compat*` 调用）。
+- **本轮（1.22.0 + 1.23.0）的三处形态都是编译器报出来的**：这一轮终于在沙箱里把 `build-for-testing` 跑通了
+  （配方见「rebase 流程与验证基线」），所以清单不再靠推：`#if swift(>=6.2)` 那条靠第 1 节的 grep 找，另外两条
+  （`OMLXMetrics` 的嵌套 `weak self`、`RemoteHostsTests` 的 `var` 捕获）是**编译器逐个报出来的**，且都在
+  **整文件新增**的代码里。教训是：光靠 grep + 翻旧形态不够，**必须真的编一次**；`make test` 的测试执行可以留给
+  沙箱外，但 `build-for-testing` 一定要在沙箱内自己跑（见该节的命令）。
 
 ## 已被 upstream 吸收的本地改动
 
@@ -929,6 +1179,17 @@ upstream 本轮碰了 fork 也改过的三个文件——`project.yml`（`SUEnab
 三处都是**不同内容落在同一行或同一段**，所以仍然要人工看，不能只看 `cherry`。§6（`needsSignIn`）与 §8（Kimi 续期）
 两条本轮都复核过：upstream 依然没修，继续保留，理由和信号见各自小节。
 
+1.22.0 + 1.23.0 复核：`git cherry -v upstream/main main` = **29 行，仍全为 `+`，没有新增被吸收的条目**
+（28 个重放 + 本轮那笔 fallout）。对比面是 **38 个文件 / +3112 -202**（`git diff --shortstat upstream/main HEAD`，
+含本笔记账）。两轮碰了不少 fork 也改过的文件——1.22.0 的 `Info.plist`（`NSAppTransportSecurity`）、
+`AppDelegate`（`qoder` / `commandCodeProfiles`）、`KimiProvider`（文档）、`SettingsView`、`TooltipCard`、
+`UsageStore`、`NotchRootView`；1.23.0 的 `NotchRootView`（换成 `drawnSurfaceStyle` + dock 那套）、`NotchSurfaceStyle`（`slabGlass`）、
+`AppDelegate`（`remoteProviders` / Muse / OMLX / GrokBot）、`SettingsView`、`Tests/NotchLayoutTests`——
+**没有一件事是「把 fork 的改动做了」**，全是不同内容落在同一行或同一段，所以仍然要人工看，不能只看 `cherry`。
+§6（`needsSignIn`）与 §8（Kimi 续期）两条本轮都复核过：upstream 依然没修，继续保留，理由和信号见各自小节。
+**顺带记一条容易误判的**：1.22.0 让 `SUAutomaticallyUpdate` 的两边一致早已写在上面（1.19.0 吸收半截），
+本轮 `SU*` 段一次都没冲突，说明那条判断仍然对。
+
 ## 维护
 
 每次 rebase 完成后：
@@ -947,5 +1208,17 @@ upstream 本轮碰了 fork 也改过的三个文件——`project.yml`（`SUEnab
    它只保证自己内部一致。§5 的 XyToken 窗口 id 就被 fixture 带偏过一次（测试全绿、线上周环不画）。
    真值的取法：应用把响应体打进 `log stream`（`xytoken usage -> …`，被截断就再加一句日志），
    或直接读解析结果——`~/Library/Preferences/com.vinz.codenotch.plist` 的 `lastGoodReadings`（base64 → JSON）。
+9. **验证分两半：编译在沙箱内自己跑，测试留给沙箱外**。pi 的 bash 工具跑在一个默认只允许写工作区与
+   `TMPDIR` 的 seatbelt 沙箱（`pi-sandbox` 扩展）里，但按「rebase 流程与验证基线」里那份配方补齐
+   `sandbox.json` 之后，**`xcodegen` + `xcodebuild build-for-testing` 可以在沙箱内跑通**——这是本轮最大的收获，
+   因为它能抓住所有编译期 fallout（1.23.0 的 3 处里有 2 处只有编译器能报）。
+   **测试执行不行**：`xcodebuild test` 要 LaunchServices（`-10822`），需要 runtime 的 `allowAppleEvents`，
+   而 pi-sandbox 没透传这个键。所以：
+   - 沙箱内：`XBS_DISABLE_SANDBOXED_BUILDS=1 xcodebuild … build-for-testing`（期望 `** TEST BUILD SUCCEEDED **`）
+   - 沙箱外：`make test` + `Scripts/install-app.sh`，跑完把数字写回「rebase 流程与验证基线」那一段
+10. **一次没记账的 rebase 是可以事后补的**：1.22.0 那轮只留下 `backup/pre-rebase-1.22.0` 与 reflog 里的
+   `rebase (finish): onto bcb28894…`。用 `git reflog main --date=iso` 找命令、用
+   `git range-diff <旧基点>..backup/pre-rebase-<版本> <新基点>..<新 tip>` 找出哪几笔 fork 提交变了形，
+   就能把这轮补写成和别轮同样的格式（1.22.0 那段就是这么来的）。
 
 不复核的文档比没有文档更糟：它会让下一次 rebase 照着过期结论删掉还需要的东西。
