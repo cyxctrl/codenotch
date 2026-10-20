@@ -232,7 +232,8 @@ MainActor.run { guard let self … } }`，Swift 5.10 报 `reference to captured 
 `make build` 才会报。
 
 macOS 14.3 + Xcode 15.4 上的实测基线：**1.19.0 那轮是 2051 通过 / 11 跳过 / 0 失败；1.23.0 这轮是 2482 个测试、
-2455 通过 / 25 跳过 / 2 失败**（那 2 个就是「显示器几何」那两条，已修，待复跑确认）。
+2455 通过 / 25 跳过 / 0 失败**（`** TEST EXECUTE SUCCEEDED **`，2026-10-20 复跑确认；中途那 2 条失败是「显示器几何」，
+见第 7 节）。
 （1.10.0 是 1387，1.11.0 首发 1531/4，1.11.0 同步后 1566/5，1.12.0 1575/5，1.13.1 是 1603/5，1.15.0 是 1666/5，
 1.16.0 是 1736/8，1.18.0 是 2038/11，1.19.0 是 2051/11，1.22.0 没记账。）
 25 个跳过的构成（从 `xcresult` 逐条抄下来的）：**9 个 opt-in live check**（Amp、Apify、Devin、LM Studio、Muse、
@@ -312,10 +313,23 @@ make test                 # 期望 0 failures
 Scripts/install-app.sh    # 装到 /Applications，并确认进程真的起来
 ```
 
-**在把数字补进上一段之前，1.22.0 / 1.23.0 的「0 failures」都是未证实的。** 尤其盯两类只在 `make test` 现形的东西：
+**你这个环境里的实操办法（agent 自己也能跑）**：用 herdr 开一个 pane——它跑在用户的终端里、不受 pi 沙箱限制：
+
+```
+herdr_layout pane_split                    → 拿到 pane id（如 w15:p2）
+herdr_pane  run   "<cmd> > /tmp/agents/x.log 2>&1; echo TAG_EXIT=$?"
+herdr_pane  wait_output  match='TAG_EXIT=[0-9]+' regex=true timeout=1800000
+```
+
+`wait_output` 的 match 要设成**只匹配回显命令之外的输出**（`TAG_EXIT=$?` 会跟着命令一起回显，
+所以用 `regex` 锚定 `=[0-9]+$`，别用 `TAG_EXIT=` 这种前缀）。1.23.0 这轮的 `make test`（1m27s）与
+`Scripts/install-app.sh`（1m45s）都是这样跑完并拿到结果的。
+
+**这一轮「0 failures」是实测过的**（2482/25/0，见上）。下一轮仍要盯两类只在 `make test` 现形的东西：
 upstream 的 CI 跑在 **`macos-26`**（`.github/workflows/ci.yml` 的 `runs-on`），它的格式化/百分比断言在旧 Foundation
-上可能算出别的字符串（1.18.0 的 `ApifyUsage.money` 就是这样）；本轮新增的 oMLX / Muse / RemoteHost / GrokBot
-测试里也有同一类断言。
+上可能算出别的字符串（1.18.0 的 `ApifyUsage.money` 就是这样）；另外 **鼠标位置会影响跳过数**——upstream 的
+`FullScreenAutoFoldTests.skipIfPointerOnNotch` 在指针停在 notch 区域时会让 8 个测试跳过（本轮就见过 25 与 33
+两个不同的跳过数，失败数不受影响）。跑之前把指针挪离屏幕顶部中央，数字才可比。
 1.13.1 这轮 `Scripts/install-app.sh` 装出 **1.13.1 (16)**、ad-hoc 签名，`/Applications` 那个进程正常起来。
 1.15.0 这轮 `Scripts/install-app.sh` 装出 **1.15.0 (18)**、ad-hoc 签名，`/Applications` 那个进程正常起来；
 实测回读那份 plist：`LSMinimumSystemVersion` = 14.3、`SU*` 三项为 false / false / 空（见第 4 节）。
@@ -334,9 +348,13 @@ upstream 的 CI 跑在 **`macos-26`**（`.github/workflows/ci.yml` 的 `runs-on`
 hardened runtime 位，`codesign -dv` 只印 `flags=0x2(adhoc)`）。实测回读那份 plist：`LSMinimumSystemVersion` = 14.3、
 `SU*` 三项为 false / false / 空（见第 4 节）。
 
-1.22.0 / 1.23.0 的安装验证：**待补**——这两轮没在沙箱内装过（原因见上），`Scripts/install-app.sh` 与
-plist 回读（`LSMinimumSystemVersion` = 14.3、`SU*` 三项 false / false / 空）要和 `make test` 一起在沙箱外跑完再填。
-特别值得回读一眼的是 1.23.0 的 Dock 样式：它是本轮唯一新加的玻璃表面，沙箱里只做了「调用点全部走 shim」的静态核对。
+1.23.0 这轮的安装验证（2026-10-20，沙箱外跑完）：`Scripts/install-app.sh` 装出 **1.23.0 (25)**、
+`Installed /Applications/Codenotch.app — version 1.23.0 (25), signed ad-hoc (no certificate in the keychain).`，
+`pgrep -x Codenotch` 有 PID（进程真的起来了）。实测回读那份 plist：`LSMinimumSystemVersion` = 14.3、
+`SUEnableAutomaticChecks` = false、`SUAutomaticallyUpdate` = false、`SUFeedURL` 为空；`codesign -dv` 印
+`flags=0x2(adhoc)`、`Signature=adhoc`（**没有 hardened runtime 位**），`vmmap <pid>` 里 `Sparkle.framework`
+命中 4 处——updater 仍在启动时就起，与 1.19.0 那条结论一致。Dock 样式是本轮唯一新加的玻璃表面，macOS 14
+上它按 `solid` 落地（`effective` 的既有回退），装机后没有额外要看的。
 
 ## 1. macOS 14.3 部署目标与 SDK shim
 
@@ -632,7 +650,8 @@ swift-nio **2.86.2**（`revision` `a18bddb0acf7`）原样落地。
 1.23.0 **完全没碰** `Sources/Info.plist`（`git diff --name-only bcb2889 upstream/main -- Sources/Info.plist` 为空）。
 `project.yml` 这边，1.22.0 只碰版本号，1.23.0 同样只碰版本号（`1.23.0` / `25`），fork 的
 `SUEnableAutomaticChecks: false` + `SUFeedURL: ""` + 那段注释原样落地。所以上一段那句「下轮这里会更干净」
-成立：这一轮 `SU*` 段**一次都没冲突**，只剩两键要压。装机验证待补（见「rebase 流程与验证基线」）。
+成立：这一轮 `SU*` 段**一次都没冲突**，只剩两键要压。装机实测（2026-10-20）：`LSMinimumSystemVersion` = 14.3、`SUEnableAutomaticChecks` = false、
+`SUAutomaticallyUpdate` = false、`SUFeedURL` 为空——细节见「rebase 流程与验证基线」的安装段。
 
 ## 5. XyToken provider（fork 独有功能）
 
