@@ -311,22 +311,21 @@ struct NotchRootView: View {
                 // for it — the pixel tests check what is ours. See TASKS.md,
                 // "The hardware's band stays black".
                 if !headlessGlass {
-                    if #available(macOS 26.0, *) {
-                        let scale = model.sizeScale
-                        let size = copySize(wing)
-                        Color.clear
-                            .frame(width: size.width * scale, height: size.height * scale)
-                            .glassEffect(model.drawnSurfaceStyle.slabGlass,
-                                         in: DockSlab(trim: slab.trim * scale,
-                                                      radius: slab.radius * scale,
-                                                      vertical: slab.vertical))
-                            // The copy is scaled from the bezel, so its middle
-                            // across the edge sits at half the *scaled* depth.
-                            .position(place.point(along: wing.lead + wing.length / 2,
-                                                  across: wing.depth * scale / 2))
-                            .offset(x: -model.edge.outward.x * model.edgeGap,
-                                    y: -model.edge.outward.y * model.edgeGap)
-                    }
+                    let scale = model.sizeScale
+                    let size = copySize(wing)
+                    Color.clear
+                        .frame(width: size.width * scale, height: size.height * scale)
+                        .compatGlassEffect(model.drawnSurfaceStyle,
+                                           in: DockSlab(trim: slab.trim * scale,
+                                                        radius: slab.radius * scale,
+                                                        vertical: slab.vertical),
+                                           slab: true)
+                        // The copy is scaled from the bezel, so its middle
+                        // across the edge sits at half the *scaled* depth.
+                        .position(place.point(along: wing.lead + wing.length / 2,
+                                              across: wing.depth * scale / 2))
+                        .offset(x: -model.edge.outward.x * model.edgeGap,
+                                y: -model.edge.outward.y * model.edgeGap)
                 }
                 notchCopy(place, wing: wing, shape: shape, clip: slab, dock: true)
             }

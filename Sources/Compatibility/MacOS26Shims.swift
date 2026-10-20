@@ -23,15 +23,21 @@ extension View {
     /// branch that never runs, since `NotchSurfaceStyle.glassAvailable` is false
     /// there — so the fallback stays the plain material.
     ///
+    /// `slab` picks upstream's `slabGlass` instead of `glass`: the Dock style's
+    /// floating slab, clear glass under its own tint rather than the frosted
+    /// card that same style gives every other surface.
+    ///
     /// The style arrives as a `NotchSurfaceStyle` rather than as its `Glass` value
     /// (which upstream spells at the call site) because `Glass` does not exist in
     /// an old SDK: only this file may name it, and only under `swift(>=6.2)`.
     func compatGlassEffect<S: Shape>(_ style: NotchSurfaceStyle,
                                      in shape: S,
-                                     interactive: Bool = false) -> some View {
+                                     interactive: Bool = false,
+                                     slab: Bool = false) -> some View {
         #if swift(>=6.2)
         if #available(macOS 26, *) {
-            let glass: Glass = interactive ? style.glass.interactive() : style.glass
+            let surface = slab ? style.slabGlass : style.glass
+            let glass: Glass = interactive ? surface.interactive() : surface
             AnyView(background { Color.clear.glassEffect(glass, in: shape) })
         } else {
             AnyView(background(.regularMaterial, in: shape))
