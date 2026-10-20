@@ -231,13 +231,16 @@ MainActor.run { guard let self … } }`，Swift 5.10 报 `reference to captured 
 **这三处都不在冲突清单里**：②③ 是新文件，① 是非冲突区段——和 1.19.0 的 `UpdateCard` 是同一类盲点，只有
 `make build` 才会报。
 
-macOS 14.3 + Xcode 15.4 上的实测基线（**最后一组真实数字来自 1.19.0 那轮**）：**2051 个测试通过、11 个跳过、0 失败**
+macOS 14.3 + Xcode 15.4 上的实测基线：**1.19.0 那轮是 2051 通过 / 11 跳过 / 0 失败；1.23.0 这轮是 2482 个测试、
+2455 通过 / 25 跳过 / 2 失败**（那 2 个就是「显示器几何」那两条，已修，待复跑确认）。
 （1.10.0 是 1387，1.11.0 首发 1531/4，1.11.0 同步后 1566/5，1.12.0 1575/5，1.13.1 是 1603/5，1.15.0 是 1666/5，
-1.16.0 是 1736/8，1.18.0 是 2038/11，1.19.0 是 2051/11）。**1.22.0 与 1.23.0 这两轮没有实测记录**，原因见下。
-11 个跳过是 **6 个 opt-in live check**（Devin、LM Studio、Ollama、Amp、Apify 和
-`TooltipRenderTests.testLiveClaudeResetCard`）加 **5 个玻璃测试**（`NotchRenderTests` 2 个 +
-`UsageBandTests` 的 `PaletteAppearanceTests` 3 个，见第 7 节）——**玻璃那 5 个一直没有变**，1.19.0 多出来的
-3 个全是 live check，不是新的适配。测试总数会随 upstream 增长——整文件新增（`FullScreenAutoFoldTests`、
+1.16.0 是 1736/8，1.18.0 是 2038/11，1.19.0 是 2051/11，1.22.0 没记账。）
+25 个跳过的构成（从 `xcresult` 逐条抄下来的）：**9 个 opt-in live check**（Amp、Apify、Devin、LM Studio、Muse、
+OMLX 活动、OMLX 日志、Ollama 列表、`TooltipRenderTests.testLiveClaudeResetCard`）加 **16 个玻璃/dock 相关**
+——其中 4 个是 fork 自己加的门禁（`NotchRenderTests.testTheFoldedPillIsTransparentInTheGlassStyle` +
+`PaletteAppearanceTests` 3 个，见第 7 节），另外 12 个是 upstream 自己就带门禁的（1.23.0 新增的
+`DockStyleGeometryTests` 7 个、`NotchRenderTests` 里 4 个 dock/暗玻璃渲染、`PanelSizingIntegrityTests` 1 个），
+**全都在 macOS 26 以下跳过，不需要 fork 再加任何门禁**。测试总数会随 upstream 增长——整文件新增（`FullScreenAutoFoldTests`、
 `SpinningArcTests`、本轮 oMLX / Muse / RemoteHost 那几组）是常见来源——**要盯的是「0 failures」，不是具体数字**。
 **这一轮的编译是在 pi-sandbox 里跑通的，测试跑不了**——这件事本身值得单独记，因为踩了六个坑、每个都不是改路径能解决的。
 先说要放行什么（`~/.pi/agent/sandbox.json`，本机现状，`--reload` 或重启 pi 后生效）：
@@ -875,8 +878,34 @@ Apify 与 `testLiveClaudeResetCard`），玻璃那 5 个一个没变——本轮
 测试里内联包住 `.dock` 那一段断言用的，不是给我们这三个测试加门禁
 （`git show upstream/main:Tests/UsageBandTests.swift | grep -c glassAvailable` 是 1，不是 3），所以**本地那三行照旧需要**。
 跳过的数量这一轮**没法在沙箱里实测**——测试执行要在 LaunchServices 下启动宿主，沙箱里过不去
-（`-10822`，见「rebase 流程与验证基线」）。按 upstream 新增的测试文件（oMLX / Muse / RemoteHost / GrokBot 几组）
-推测只增不减，但要按「0 failures、玻璃仍是 5 个」的标准在沙箱外核对。
+（`-10822`，见「rebase 流程与验证基线」）。
+
+**1.23.0 起还有第三类，和玻璃无关：显示器几何**。`Tests/NotchRenderTests.swift` 里两个测试
+（`EdgeCrossfadeTests.testItComesBackOnTheNewEdgeAtFullStrength` 与
+`EverySizeSettingAppliesEverywhereTests.testTheSizeSettingSurvivesTheHardwareEdge`）在**本机实测直接红**
+（2026-10-20 第一次在沙箱外跑 `make test`：**2482 个测试、2455 通过、25 跳过、2 失败**——失败的就这两个；
+跳过数从 1.19.0 的 11 涨到 25，构成还没逐条核对，其中既有本轮新增的 opt-in live check，也应有「本机缺某个 CLI/
+显示器」那类），
+根因是 upstream 默认了「解析出来的屏幕 = 面板落到的屏幕」：
+
+- 前者在断言时重新调 `NotchGeometry.preferredScreen(from: NSScreen.screens)`（内部走 `NSScreen.main`），
+  而 `NSScreen.main` 在**没有窗口的测试宿主**里不稳定 → 期望 982（外接屏，位于内建屏上方）、实际 0（内建屏），
+  也就是断言在比较两块不同的屏幕。改成**从面板自身的位置反推它在哪块屏幕上**
+  （`NSScreen.screens.first { $0.frame.contains(面板中点) }`），再比较两者的 `minY`。
+- 后者用 `guard NSScreen.screens.contains(where: { $0.hardwareNotch != nil })` 只保证**某块**屏有刘海，
+  但 notch 采纳的是 `NSScreen.main` 那块（本机是外接屏）→ `cutout` 为 nil → `mergedScale` 为 nil。
+  改成把显示偏好钉到有刘海那块——**直接赋值 `controller.displayPreference = .display(identifier)`**，
+  不能用 `apply(displayPreference:)`（它会 `relocate()`）。
+
+两处都**不是行为改动**，只是让前提成立，因此没有加 `XCTSkipUnless`——那会在这台机器上永久跳过，而这台机器
+恰恰是唯一需要验证的机器。判据不变：upstream 若自己把这两个测试改成不依赖 `NSScreen.main`，本地这两处就该删。
+
+**修这两条时踩到的坑，值得记**：`relocate()` 会创建 panel（`NotchWindowController` 第 391 行），而
+`apply(edge:)` 只有在**还没有 panel** 时才同步设 `model.edge`；panel 一旦存在，它就走 0.16s 淡出、
+在 **completion 里**才把 edge 改掉。测试不 run loop，edge 就永远不变 → `adopt()` 仍按旧 edge 算 →
+`cutout` 为 nil → `mergedScale` 为 nil。第二轮失败正是这么来的（我给测试加的 `apply(displayPreference:)`
+先 relocate 了一次，把这条同步路径变成了异步路径）。所以这类测试里设显示偏好必须**直接赋值**
+`controller.displayPreference = …`，不要调 `apply(displayPreference:)`。
 
 ## 8. Kimi OAuth token 自主续期
 
