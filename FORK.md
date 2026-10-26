@@ -5,27 +5,32 @@
 
 ```sh
 git fetch upstream                              # remote 是 SSH：本机 HTTPS:443 连不上
-git branch -f backup/pre-rebase main            # 变基前留退路
+git branch -f backup/pre-rebase-<版本> main     # 变基前留退路，带版本号才好回溯
 git rebase --onto upstream/main <fork 基点> main   # 注意 --onto，理由见下
 ```
 
 这份文档的唯一目的：**下次 rebase 时不必重新推导「这条改动为什么存在、还需不需要」。**
 每节按同一格式写——为什么存在 / 涉及文件 / rebase 时怎么判断。
 
-> 写入时的基线：`upstream/main = 9e7cd3d`——版本号 **1.23.0 (25)**，本轮 **61 个提交**。
-> 顶点那笔是 1.23.0 的功能发布，四件事：**「remaining mode」**（notch 可以读「还剩多少」而不是「已用多少」，
-> 环的扫过角度、环下数字、卡片与菜单跟着翻，另有「任一窗口耗尽就把两个环都关掉」「按剩余排序」
-> 「隐藏已耗尽的账号」三个可选开关）；**Dock 表面样式**（notch 变成贴着屏幕边的浮起玻璃板，
-> `NotchSurfaceStyle` 多出 `.dock` 与 `slabGlass` 两处新 API，见第 1 节）；**oMLX 与 Muse 两个新 provider**；
-> **远程 Claude / Codex 主机**（`preferences.remoteHosts`，经 SSH 读别的机器上的凭证）。
-> 其余是：Grok Bot 的周窗口改从磁盘缓存读、Enterprise 花费上限的月底预测、Z.AI 的键可取自 `GLM_API_KEY`、
-> `UsageArchive` 清理旧 Perplexity 条目、工作指示器换成品牌色「呼吸圆点」（可选）、DeepSeek 在中国法定
-> 节假日全天走 off-peak、外接显示器睡眠唤醒后恢复 notch，以及若干 Windows 端与文档提交。
+> 写入时的基线：`upstream/main = 6522e9f`——版本号 **1.24.0 (26)**，本轮 **102 个提交**。
+> 顶点那笔是 1.24.0 的功能发布，四件事：**菜单栏从「一个图标」变成一块面板**——里面直接排 provider
+> 卡片（每张自带 Detail 开关）、按「谁还剩多少」排序、宽度可调、另有独立的 activity style 与 click action
+> 偏好（`MenuUsageCard` / `MenuCommandRow` / `StatusItemWaitingBadges` / `MenuBarReading` /
+> `MenuBarClickAction` / `MenuBarActivityStyle` / `RingOrder` 七个新文件）；**西班牙语本地化**（`es` 进
+> `CFBundleLocalizations`，Mac 与 Windows 两端）；**Higgsfield 这个新 provider**（`HiggsfieldProvider` /
+> `CLI` / `Credentials` / `Usage`，走 `.command` 登录路由、有 `account()`）；**burn-deficit 环改成
+> 「先用掉快过期的」排序**。
+> 其余是：Antigravity 的 ACP 支持与配额家族修复、DeepSeek Harness、Windows 端的 Claude 多账号与原生
+> 任务栏指示、Qoder 走官方 agent SDK、OpenCode 2.x 读 DB 里的 Go key、agy 在 Windows 上的 ConPTY、
+> Linux 在 XWayland 下的 notch、Ollama cloud 的 totals 计数、Pi 会话目录的符号链接比较。
 > 本机 **macOS 14.3 + Xcode 15.4（Swift 5.10）**。
 > 上游在 1.11.0 之前重写过全部历史（见「上游重写过历史」），旧 hash `abccf0e` 已不在 upstream；
-> **这一轮没有重写**：rebase 前 `git merge-base main upstream/main` 有值，正是上轮的基点 `bcb2889`。
-> **上一轮（1.22.0）当时只做了 rebase、没有记账**——`0083369`(1.19.0) → `bcb2889`(1.22.0) 那 91 个提交
-> 的复核这次一并补上（见「rebase 流程与验证基线」的 1.22.0 段）；这次 rebase 的对象是 1.22.0 → 1.23.0。
+> **这一轮没有重写**：rebase 前 `git merge-base main upstream/main` 有值，正是上轮的基点 `9e7cd3d`。
+> **这一轮的特殊之处：编译期一处 fallout 都没有**——`make build` 与 `build-for-testing` 一次全绿，
+> 所以没有新的 `Fix old-toolchain fallout` 提交（1.13.1 之后第一次）。原因是 upstream 本轮
+> **一个玻璃调用点、一个 Kimi 文件、一个玻璃门禁测试都没碰**（见第 1 / 7 / 8 节的复核）。
+> 冲突只有 3 处：`project.yml`（`es` 紧贴 `LSMinimumSystemVersion`）、`AppDelegate` 的 provider 链
+> （`HiggsfieldProvider()`）、`UsageStore` 的 wake 观察者（`refreshNow` 变成了返回 `Task?`）。
 > 每次 rebase 后请更新这一行和文中已过期的结论（见末尾「维护」）。
 
 ## 目录
@@ -90,13 +95,14 @@ done
 1.19.0 → 1.22.0（91 个提交）复核：**仍然没有重写**——`0083369` 是 `bcb2889` 的祖先
 （`git merge-base --is-ancestor 0083369 bcb2889` 为真）。这一轮当时没记账，但历史连续性可以事后确认。
 1.22.0 → 1.23.0（61 个提交）复核：**仍然没有重写**，输出 `bcb2889`（上轮的基点）。
+1.23.0 → 1.24.0（102 个提交）复核：**仍然没有重写**，输出 `9e7cd3d`（上轮的基点）。
 所以**下次先跑这一条判断**：有输出就走普通 rebase / `--onto` 都行，输出为空才需要去比对 tree。
 
 ## rebase 流程与验证基线
 
 ```sh
 git fetch upstream                              # remote 是 SSH：本机 HTTPS:443 连不上
-git branch -f backup/pre-rebase main            # 变基前留退路
+git branch -f backup/pre-rebase-<版本> main     # 变基前留退路（本轮是 backup/pre-rebase-1.24.0）
 
 # <fork 基点> = 上一次同步后的 upstream 顶点，即本仓库第一个 fork 提交的父亲。
 # 传旧 hash 也可以：--onto 只把它当「到这里为止不算 fork」的范围边界，
@@ -231,11 +237,38 @@ MainActor.run { guard let self … } }`，Swift 5.10 报 `reference to captured 
 **这三处都不在冲突清单里**：②③ 是新文件，① 是非冲突区段——和 1.19.0 的 `UpdateCard` 是同一类盲点，只有
 `make build` 才会报。
 
-macOS 14.3 + Xcode 15.4 上的实测基线：**1.19.0 那轮是 2051 通过 / 11 跳过 / 0 失败；1.23.0 这轮是 2482 个测试、
-2455 通过 / 25 跳过 / 0 失败**（`** TEST EXECUTE SUCCEEDED **`，2026-10-20 复跑确认；中途那 2 条失败是「显示器几何」，
-见第 7 节）。
+1.24.0 这轮（**102 个提交**，命令：`git rebase --onto upstream/main 9e7cd3d main`）。**3 处冲突、停三次**：
+① `project.yml`——upstream 往 `CFBundleLocalizations` 追加 `es`，正好紧贴 fork 改的 `LSMinimumSystemVersion`
+→ 各留一份（本地化列表取 upstream、版本下限保持 14.3；与 1.15.0 / 1.18.0 / 1.22.0 同一个形态）；
+② `Sources/App/AppDelegate.swift` 的 provider 链——upstream 在 `KiloProvider(),` 后面加了 `HiggsfieldProvider(),`
+→ 保留 fork 的 `+=` 结构、新 provider 落在同一句里；它**不是** `WebSessionProvider`，所以不进
+`webProviders` / `signInItems`（那两个字面量本轮没冲突，仍是 `[deepSeek, qianwen, qoder, xytoken]`）；
+③ `Sources/Model/UsageStore.swift` 的 wake 观察者——upstream 把 `refreshNow()` 的返回改成 `Task?`
+（`ca6d274`「Refresh all from the menu without closing it」要等那一轮跑完），fork 的 `guard !displayIsAsleep()`
+正好落在被改的那一行里 → 两边都留：留 fork 的两行 guard、返回值按新签名写 `_ = self.refreshNow(freshness: .live)`。
+其余 31 个 fork 提交干净落地；`SettingsView` / `TooltipCard` / `Info.plist`（只是多了 `es`）/
+`Tests/ClaudeProfileTests` / `Tests/NotchLayoutTests` / `Tests/OpenCodeUsageTests` 全部自动合并成功。
+`git range-diff 9e7cd3d..backup/pre-rebase-1.24.0 upstream/main..main` 34 笔里只有 **4 笔**显示内容差异：
+上面那三笔 + `9074a42` 那笔（§6，`SettingsView` 的文档注释被 upstream 换了措辞，语义未变）；
+`git cherry -v upstream/main main` 里重放的那 **34 行全为 `+`**（记账这笔提交之后是 35 行，见「已被 upstream 吸收」）。
+**本轮 0 处旧工具链 fallout**——`make build`（`** BUILD SUCCEEDED **`）与 `build-for-testing`
+（`** TEST BUILD SUCCEEDED **`）在沙箱内各自一次跑绿，所以**没有** `Fix old-toolchain fallout` 这一笔，
+是 1.13.1 之后第一次。原因可查：`git diff --name-only 9e7cd3d upstream/main` 里既没有玻璃调用点文件、
+也没有任何 Kimi 文件、更没有 `NotchRenderTests` / `UsageBandTests`。**但这条结论是查出来的、不是猜的**：
+空 fallout 也要真的把两次 build 跑完才能说。
+沙箱外实测（herdr pane，1m28s）：**2632 个测试、0 失败、33 跳过**；装机 `Scripts/install-app.sh` 装出
+**1.24.0 (26)**、ad-hoc、`/Applications` 那份进程正常起来，回读 plist 仍是 14.3 + `SU*` false / false / 空。
+
+macOS 14.3 + Xcode 15.4 上的实测基线：**1.19.0 是 2051 通过 / 11 跳过 / 0 失败；1.23.0 是 2482 个测试、
+2455 通过 / 25 跳过 / 0 失败；1.24.0 是 2632 个测试、2599 通过 / 33 跳过 / 0 失败**
+（都是 `** TEST EXECUTE SUCCEEDED **`；1.23.0 那次是 2026-10-20 复跑确认，中途那 2 条失败是「显示器几何」，
+见第 7 节；1.24.0 那次 2026-10-26 跑在 herdr pane 里、沙箱外）。
+**1.24.0 的 33 比 25 多出的那 8 个是 `FullScreenAutoFoldTests`**——指针停在 notch 区域时
+`skipIfPointerOnNotch` 让整组跳过，本机跑测时鼠标正停在屏幕顶部中央；**构成本身没变**
+（9 个 opt-in live check + 16 个玻璃/dock，逐条数过），所以**要盯的依旧是「0 failures」，不是具体数字**。
+跑之前把指针挪离屏幕顶部中央，数字才和上一轮可比。
 （1.10.0 是 1387，1.11.0 首发 1531/4，1.11.0 同步后 1566/5，1.12.0 1575/5，1.13.1 是 1603/5，1.15.0 是 1666/5，
-1.16.0 是 1736/8，1.18.0 是 2038/11，1.19.0 是 2051/11，1.22.0 没记账。）
+1.16.0 是 1736/8，1.18.0 是 2038/11，1.19.0 是 2051/11，1.22.0 没记账，1.23.0 是 2482/25，1.24.0 是 2632/33。）
 25 个跳过的构成（从 `xcresult` 逐条抄下来的）：**9 个 opt-in live check**（Amp、Apify、Devin、LM Studio、Muse、
 OMLX 活动、OMLX 日志、Ollama 列表、`TooltipRenderTests.testLiveClaudeResetCard`）加 **16 个玻璃/dock 相关**
 ——其中 4 个是 fork 自己加的门禁（`NotchRenderTests.testTheFoldedPillIsTransparentInTheGlassStyle` +
@@ -477,6 +510,14 @@ member 'glassEffect'`——这正是「新文件不冲突」那条盲点，见�
 （panel 与 slab）都套了 `if #available(macOS 26.0, *)`，fork 的形态是「删包装、换 `compat*`」，
 `headlessGlass` 的 if/else 结构与 `if glassy && !dock` 的条件都保留。
 
+1.24.0 复核：upstream 本轮**一个玻璃调用点都没碰**——`git grep -c 'glassEffect\|pointerStyle' 9e7cd3d` 与
+`upstream/main` 的清单**逐行相同**（限定 `-- '*.swift'` 时 10 个文件、同一批行号；不加限定会多出一行 `TASKS.md` 里提到这个名字的文字），`git diff --name-only 9e7cd3d upstream/main`
+里也没有 `NotchRootView` / `NotchSurfaceStyle` / `SettingsView` 的任何一处玻璃。fork 侧仍是
+**9 个 `compatGlassEffect` + 1 个 `compatPointerStyle`**，一一对应原样；`NotchSurfaceStyle.glass` /
+`slabGlass` 上游**依旧**只有 `@available`、没有自带门禁，fork 的 `#if swift(>=6.2)` 继续留。
+本轮新增的 11 个 Swift 源文件（菜单栏那七件 + Higgsfield 四件）里**没有一个**用 `glassEffect` /
+`pointerStyle`，所以编译期零 fallout——**这正是本轮第一次不需要 fallout 提交的原因**。
+
 ## 2. ad-hoc 签名、DEV_RESIGN 与安装路径
 
 **为什么存在**：本机没有证书时，`make` 的三个签名分支是
@@ -542,6 +583,11 @@ updater 启动，值得顺手看一眼 `log stream` 里有没有 Sparkle 的报�
 装机时顺手要看的还是那条老经验的反面：1.19.0 起 updater 在启动时就起，fork 的 `SUFeedURL` 是空的，
 所以 1.23.0 新增的「在 notch 里问 Update / Later」（`UpdateCard`）在 fork 里应当**完全不可达**——装上以后
 若看到那个红点或更新卡，说明 `SUFeedURL` / `SUEnableAutomaticChecks` 被谁改回去了（见第 4 节）。
+1.24.0 复核：`Scripts/` 与 `Makefile` 这一轮**又都没进** upstream 的改动集（`git diff --name-only 9e7cd3d
+upstream/main | grep -E 'Makefile|Scripts/'` 为空），格局原样。1.23.0 那轮欠的装机验证**这轮补上了**：
+`Scripts/install-app.sh` 装出 **1.24.0 (26)**，脚本自己印 `signed ad-hoc (no certificate in the keychain)`，
+`pgrep -x Codenotch` 拿到 PID；`codesign -dv` 仍是 `flags=0x2(adhoc)` / `Signature=adhoc`（没有 hardened runtime 位），
+回读 plist 为 14.3 + `SU*` false / false / 空——上面那条「`UpdateCard` 应当不可达」的前提照旧成立。
 
 ## 3. SwiftNIO 固定在 2.86.x
 
@@ -594,6 +640,11 @@ swift-nio **2.86.2**（`revision` `a18bddb0acf7`）原样落地。
 （diff 里没有该上下文行）。fork 的 `from: "2.86.0"` 与解析结果 swift-nio **2.86.2**（`revision` `a18bddb0acf7`）
 原样落地——不过这一轮**没在真机上解析过一次**：`make gen` 在沙箱里写不了临时目录，解析这一步要等
 沙箱外第一次 `make build` 才重新验证（若那时报 3 节顶部那条 tools-version 错，说明 pin 又被盖掉了）。
+1.24.0 复核：`Package.resolved` **这一轮同样没进** upstream 的改动集
+（`git diff --name-only 9e7cd3d upstream/main -- Package.resolved` 为空），`packages:` 段也没有进
+（`project.yml` 的 diff 只有版本号两行与 `es` 那一行）。上一段欠的「沙箱外真机解析」这次也补上了：
+沙箱内 `make build` 跑完了 `xcodegen generate` + `cp Package.resolved`，没有出现 3 节顶部那条
+tools-version 错，说明 pin 仍压得住。
 
 ## 4. 关闭 Sparkle 自动更新
 
@@ -652,6 +703,11 @@ swift-nio **2.86.2**（`revision` `a18bddb0acf7`）原样落地。
 `SUEnableAutomaticChecks: false` + `SUFeedURL: ""` + 那段注释原样落地。所以上一段那句「下轮这里会更干净」
 成立：这一轮 `SU*` 段**一次都没冲突**，只剩两键要压。装机实测（2026-10-20）：`LSMinimumSystemVersion` = 14.3、`SUEnableAutomaticChecks` = false、
 `SUAutomaticallyUpdate` = false、`SUFeedURL` 为空——细节见「rebase 流程与验证基线」的安装段。
+1.24.0 复核：`Sources/Info.plist` 这一轮**进了**改动集，但只有一行——`CFBundleLocalizations` 多一个 `es`
+（`git diff 9e7cd3d upstream/main -- Sources/Info.plist` 就是 `+<string>es</string>`），`SU*` 三键与
+`LSMinimumSystemVersion` 都没被碰；`project.yml` 这边只改了 `MARKETING_VERSION` / `CURRENT_PROJECT_VERSION`
+（`1.24.0` / `26`）并追加同一行 `es`。fork 的 `SUEnableAutomaticChecks: false` + `SUFeedURL: ""` + 注释原样落地，
+`SU*` 段又一次没冲突。装机实测（2026-10-26）：14.3 / false / false / 空，与上轮一致。
 
 ## 5. XyToken provider（fork 独有功能）
 
@@ -751,6 +807,16 @@ upstream 单独加，与 fork 不相邻，自动合并干净）。
 （`RemoteClaudeProvider` / `RemoteCodexProvider`，走 SSH）——都不是 `WebSessionProvider`，`webProviders` 不用动。
 「外观配置同步规则」照上面的清单看过一遍：1.23.0 的四个新开关里有两个要窗口角色，xytoken 两个角色都已声明，
 **本轮不需要给 xytoken 补任何声明**。
+1.24.0 复核：`Sites.swift` **依旧没被 upstream 碰**（`git diff --name-only 9e7cd3d upstream/main | grep -i sites` 为空），
+两个注册字面量原样——`AppDelegate` 这轮又冲突了一次，但冲突点仍在 provider 链（`HiggsfieldProvider()`），
+`webProviders` / `signInItems` 自动合并干净。**本轮新 provider 同样与 fork 无关**：`HiggsfieldProvider` 是
+`actor: UsageProvider`（`.command` 登录路由、有 `account()`），**不是** `WebSessionProvider`，所以不进这两个列表，
+fork 的归类（§6「借用本地凭证的都算 true」）也不需要为它加分支。
+**1.24.0 还带来一条「看着像新消费面、其实与 fork 无关」的**：菜单栏面板（`MenuUsageCard` 等七个新文件）
+读的是另一套摘要，`StatusItemSummary.canSummarise`（`Sources/App/StatusItemSummary.swift:68`）只收
+「有五小时窗口、或属于 Claude / Codex 家族」的 provider，而 xytoken 的窗口是 `day:1` / `week:1`，
+**进不了菜单栏**。`Sites.xytoken` 里那句注释（The menu bar is out of reach either way）在 1.24.0 依然成立，
+所以本轮**不需要**为它补任何角色声明；哪天 xytoken 有了五小时窗口，这条才要重看。
 
 本节本地演进（**非 rebase**）：给 `static let xytoken` 补上窗口角色 `headlineID: "day:1"` /
 `weeklyID: "week:1"`，使外观面板里依赖 `weeklyID` 的那组配置（每周圆环、虚线每周圆环、圆环读数含每周、
@@ -887,6 +953,16 @@ upstream 侧只有 `needsSignInRenewal`。两轮都**没有**再给 `SignInRoute
 （upstream 在 `account == nil` 时同样摆出登录引导），fork 的归类没有让它更糟，所以不必改。哪天 upstream 给 OMLX 补上
 `account()`，这里就自然恢复正常。
 
+1.24.0 复核仍是**上游没修**：`grep -rn 'needsSignIn\b' Sources/` 命中的仍是 fork 的那五处
+（`ProviderAccount.needsSignIn` 的声明、`UsageStore.needsSignIn(_:account:)` 与调用点、`SettingsView` 的两处读取），
+upstream 侧只有 `needsSignInRenewal`。`SignInRoute` **仍然只有那四个 case**（本轮 `.command` 没加第五个），
+所以穷尽 switch 原样编过——**而且这次是靠编译器确认的**：`make build` 与 `build-for-testing` 都跑了，
+没有 `switch must be exhaustive`。`UsageStore.swift` 这轮**进了** upstream 的改动集（`refreshNow` 改成返回 `Task?`），
+但撞上的是 fork 的 wake 观察者、不是 `needsSignIn` 那条路径，见「冲突热点」；`ProviderAccount.swift` 没进。
+**1.24.0 新增 provider 的归类核对**：`HiggsfieldProvider` 是 `.command("hf auth login", name: "Higgsfield", install: …)`
+且**实现了 `account()`**（`HiggsfieldCredentials.isPresent` 为真才非空），与「借用本地凭证的都归 true」自洽，
+不用为它加分支。这也是第 1.18.0 段那条告警的又一次正面样本：**`.command` + 有 `account()` ＝ 安全**。
+
 ## 7. 玻璃样式测试在 macOS 26 以下跳过
 
 **为什么存在**：upstream 新增的 `NotchRenderTests.testTheFoldedPillIsTransparentInTheGlassStyle`
@@ -943,6 +1019,12 @@ Apify 与 `testLiveClaudeResetCard`），玻璃那 5 个一个没变——本轮
 （`git show upstream/main:Tests/UsageBandTests.swift | grep -c glassAvailable` 是 1，不是 3），所以**本地那三行照旧需要**。
 跳过的数量这一轮**没法在沙箱里实测**——测试执行要在 LaunchServices 下启动宿主，沙箱里过不去
 （`-10822`，见「rebase 流程与验证基线」）。
+1.24.0 复核：upstream 这轮**一个玻璃门禁文件都没碰**（`git diff --name-only 9e7cd3d upstream/main | grep -E
+'NotchRenderTests|UsageBandTests|NotchEdgeTests'` 为空），fork 的 4 行 `XCTSkipUnless` 原样；那三个
+`PaletteAppearanceTests` 与 `testTheFoldedPillIsTransparentInTheGlassStyle` 在 upstream 里**依旧没有门禁**。
+这一轮的跳过数终于**在沙箱外实测到了**：`make test` 是 2632 个测试 / 2599 通过 / **33 跳过** / 0 失败，
+逐条对下来构成没变（9 opt-in + 16 玻璃/dock），多出的 8 个是 `FullScreenAutoFoldTests` 的「指针停在 notch 上」，
+见「rebase 流程与验证基线」的基线段。玻璃门禁**一行都不用加**。
 
 **1.23.0 起还有第三类，和玻璃无关：显示器几何**。`Tests/NotchRenderTests.swift` 里两个测试
 （`EdgeCrossfadeTests.testItComesBackOnTheNewEdgeAtFullStrength` 与
@@ -963,6 +1045,9 @@ Apify 与 `testLiveClaudeResetCard`），玻璃那 5 个一个没变——本轮
 
 两处都**不是行为改动**，只是让前提成立，因此没有加 `XCTSkipUnless`——那会在这台机器上永久跳过，而这台机器
 恰恰是唯一需要验证的机器。判据不变：upstream 若自己把这两个测试改成不依赖 `NSScreen.main`，本地这两处就该删。
+1.24.0 复核：upstream 这轮**没碰** `Tests/NotchRenderTests.swift`，fork 那两处（第 772 行按面板中点反推屏幕、
+第 1244 行直接赋值 `displayPreference = .display(identifier)`）原样在页；`make test` 在**接了外接屏的本机**上
+0 失败，说明这两处仍然成立——**上游没修，本地继续留**。
 
 **修这两条时踩到的坑，值得记**：`relocate()` 会创建 panel（`NotchWindowController` 第 391 行），而
 `apply(edge:)` 只有在**还没有 panel** 时才同步设 `model.edge`；panel 一旦存在，它就走 0.16s 淡出、
@@ -1085,6 +1170,15 @@ upstream/main | grep -i kimi` 为空），信号 grep 仍只命中 fork 的 `Kim
 与 fork 的 Kimi 做法（照着 CLI 的私有协议**写回**、还要抢 CLI 的锁）不是一回事。所以信号 grep 要按文件看：
 **上游若开始往 Kimi 的凭证文件里写、或在 401 后重取，才算它修了同一件事**；Grok 命中不算。
 
+1.24.0 复核：**上游仍未修**，而且这轮**又一个 Kimi 文件都没碰**（`git diff --name-only 9e7cd3d upstream/main
+| grep -i kimi` 为空）——`KimiProvider` 自动合并干净，`fetchSnapshot()` 里那句 `refresher.usableCredential()`
+原样在页（第 44 行），这一整笔继续留着。
+**信号 grep 的基线这轮又宽了一点**：`grep -rln "oauth/token\|refresh_token" Sources/Providers/` 现在命中
+`KimiCredentials` / `KimiTokenRefresher`（fork 的那两个）、`GrokLocalProvider` / `GrokCredentials`（1.23.0 起），
+**外加 `AntigravityCredentials`**——1.24.0 让它自己做 token 刷新（那个文件里就换了新的 `AntigravityCredentials` 返回，**只在内存里用**，与 Grok 同类；`grant_type=refresh_token` 与
+`payload.refresh_token` 都在那个文件里）。判据不变：**上游往 Kimi 的凭证文件里写、或 401 后重取，才算修了同一件事**；
+Grok 与 Antigravity 命中都不算。下次复核先按文件看，别再被命中清单的长度带偏。
+
 ## 冲突热点（真实踩到过的）
 
 | 位置 | 现象 | 处理 |
@@ -1092,10 +1186,11 @@ upstream/main | grep -i kimi` 为空），信号 grep 仍只命中 fork 的 `Kim
 | 整个仓库 | upstream 重写了全部 commit（hash 全变），没有共同祖先 | 见「上游重写过历史」：用 `--onto`，别用 `git rebase upstream/main` |
 | `ProviderGlyph.swift` / `GlyphOutline.swift` | git **自动合并成功**，但 enum 出现重复的 `case kimi` / `static let kimi` | 回退到 upstream 版本 |
 | `README.md` | 同上：表格行重复 | 回退到 upstream 版本 |
-| `AppDelegate.swift` 的 provider 组装 | 它被 upstream 反复重构，且**几乎每轮都往链里加 provider**：1.15.0 加 `qianwen`（与 fork 的 `xytoken` 落在同一个列表字面量）、1.16.0 加 `customProviders`、1.18.0 加 `AmpProvider()` / `ApifyProvider()` / `KiloProvider()`（正落在 fork 1.16.0 拆成 `+=` 的那条链中间）、1.22.0 加 `qoder`（同样是 `WebSessionProvider`）与 `commandCodeProfiles`、1.23.0 加 `remoteProviders` / `GrokBotProvider()` / `MuseLocalProvider()` / `OMLXLocalProvider(…)` | 保留 upstream 的 provider 集合与顺序，fork 只保留「一句一个 `+=`」的形态：新 provider 按 upstream 的位置各起一句并显式 `as UsageProvider`；`webProviders` / `signInItems` 里把 XyToken 加回去（1.23.0 起是 `[deepSeek, qianwen, qoder, xytoken]`），见第 5 节 |
+| `AppDelegate.swift` 的 provider 组装 | 它被 upstream 反复重构，且**几乎每轮都往链里加 provider**：1.15.0 加 `qianwen`（与 fork 的 `xytoken` 落在同一个列表字面量）、1.16.0 加 `customProviders`、1.18.0 加 `AmpProvider()` / `ApifyProvider()` / `KiloProvider()`（正落在 fork 1.16.0 拆成 `+=` 的那条链中间）、1.22.0 加 `qoder`（同样是 `WebSessionProvider`）与 `commandCodeProfiles`、1.23.0 加 `remoteProviders` / `GrokBotProvider()` / `MuseLocalProvider()` / `OMLXLocalProvider(…)`、1.24.0 加 `HiggsfieldProvider()`（落在 `KiloProvider(),` 之后，仍是那句 `+=` 的数组字面量里；**它不是 `WebSessionProvider`**，不进 `webProviders` / `signInItems`） | 保留 upstream 的 provider 集合与顺序，fork 只保留「一句一个 `+=`」的形态：新 provider 按 upstream 的位置各起一句并显式 `as UsageProvider`；`webProviders` / `signInItems` 里把 XyToken 加回去（1.23.0 起是 `[deepSeek, qianwen, qoder, xytoken]`），见第 5 节 |
 | `Sites.swift` | 两个相邻的 site 定义 | 见第 5 节 |
 | `UsageStore.swift` 的 `ProviderSummary` 构造 | upstream 1.16.0 加了 `customIconFilename:`，正好落在 fork「读一次 `account()` + `needsSignIn:`」那一段中间 | 两边都留：upstream 的新参数 + fork 的共享 `account` 变量与 `needsSignIn:`，顺序按 `ProviderSummary` 声明，见第 6 节 |
 | `UsageStore.swift` 的 `needsSignIn` switch | upstream 给 `SignInRoute` 加 case（1.18.0 的 `.command`），而 fork 的 switch 穷尽、没有 `default` → **自动合并干净、没有任何冲突标记，但 `make build` 报 `switch must be exhaustive`** | 新 case 按第 6 节的判据归类：借用本地凭证的（`.openApp` / `.guidance` / `.command`）返回 true，只有 `.modal` 看 `snapshotStatus == .needsAuth` |
+| `UsageStore.swift` 的 wake 观察者（1.24.0 新增这一形态） | upstream 把 `refreshNow()` / `refreshNow(freshness:)` 的返回从 `Void` 改成 `Task<Void, Never>?`（`ca6d274`「Refresh all from the menu without closing it」要等那一轮跑完），而 fork 的 `guard !displayIsAsleep()` 两行正落在被改的那一行里 → **真冲突**（不是自动合并） | 两边都留：保留 fork 的两行 guard，返回值按新签名写 `_ = self.refreshNow(freshness: .live)`（新签名**没有** `@discardableResult`，漏了 `_ =` 只是警告不是错误，但同文件另一处 upstream 自己就写的 `_ =`，跟着写） |
 | `TooltipCard.swift` / `UsageResetCard.swift` 的 tooltip 玻璃 | upstream 1.16.0 改了**同一行**的内容（`clampedTailOffset`、`TooltipGlassContrast.dim(...)`），而 fork 把这一行换成了 shim | 取 upstream 的新内容，只把 `glassEffect` 换成 `compatGlassEffect(surfaceStyle, …)`，见第 1 节 |
 | `SettingsView.swift` 的侧栏底与 orb | upstream 1.15.0 把玻璃侧栏换成扁平 `SettingsPalette.sidebar`，并删掉 `sidebarToggle` / `collapsedSidebarToggle` / `SidebarIcon` | fork 那两处 `compatGlassEffect` 失去对象 → **取 upstream，不要加回**（见第 1 节） |
 | `project.yml` / `Info.plist` 的本地化列表 | upstream 反复往 `CFBundleLocalizations` 追加（1.15.0 加 `zh-Hant`、1.18.0 加 `id` / `ko` / `uz` / `tr`），总有一两项紧邻 fork 改的 `LSMinimumSystemVersion` | 各留一份：本地化列表取 upstream，`LSMinimumSystemVersion` 保持 14.3 |
@@ -1186,6 +1281,11 @@ upstream/main | grep -i kimi` 为空），信号 grep 仍只命中 fork 的 `Kim
   （`OMLXMetrics` 的嵌套 `weak self`、`RemoteHostsTests` 的 `var` 捕获）是**编译器逐个报出来的**，且都在
   **整文件新增**的代码里。教训是：光靠 grep + 翻旧形态不够，**必须真的编一次**；`make test` 的测试执行可以留给
   沙箱外，但 `build-for-testing` 一定要在沙箱内自己跑（见该节的命令）。
+- **1.24.0：一处都没有**。`make build` 与 `build-for-testing` 都是一次绿，清单里八种形态**一种都没触发**。
+  原因不是运气，可复核：upstream 本轮既没动任何 `glassEffect` / `pointerStyle` 调用点（第 1 节），
+  也没动任何玻璃门禁测试（第 7 节），新增的 11 个 Swift 文件里没有玻璃调用、没有嵌套并发闭包、没有
+  被并发闭包捕获的 `var`，`SignInRoute` 也没多出新 case（第 6 节）。**别把这一轮的「空」当成下轮的预期**——
+  这三条恰好是每轮最常变的地方。
 
 ## 已被 upstream 吸收的本地改动
 
@@ -1282,6 +1382,18 @@ upstream 本轮碰了 fork 也改过的三个文件——`project.yml`（`SUEnab
 §6（`needsSignIn`）与 §8（Kimi 续期）两条本轮都复核过：upstream 依然没修，继续保留，理由和信号见各自小节。
 **顺带记一条容易误判的**：1.22.0 让 `SUAutomaticallyUpdate` 的两边一致早已写在上面（1.19.0 吸收半截），
 本轮 `SU*` 段一次都没冲突，说明那条判断仍然对。
+
+1.24.0 复核：`git cherry -v upstream/main main` = **35 行，仍全为 `+`，没有新增被吸收的条目**
+（34 个重放 + 本轮这笔记录；**这一轮没有 `Fix old-toolchain fallout`**——编译期零 fallout，见
+「rebase 流程与验证基线」）。对比面是 **43 个文件 / +4004 -240**（`git diff --shortstat upstream/main HEAD`，
+含本笔记账；在解完冲突、还没记账时是 43 / +3892 -240）。
+upstream 本轮碰了 fork 也改过的 9 个文件——`AppDelegate`（`HiggsfieldProvider`）、`UsageStore`（`refreshNow`
+的返回类型）、`SettingsView`（菜单栏那一段）、`TooltipCard`、`Info.plist` 与 `project.yml`（只有 `es` 与版本号）、
+三个 `Tests/*`——但**除了 `es` 那一行是「同一件事的两种写法」之外，没有任何一件是「把 fork 的改动做了」**，
+所以 `cherry` 仍要配人工看。§6（`needsSignIn`）与 §8（Kimi 续期）两条本轮都复核过：upstream 依然没修，
+理由和信号见各自小节；§5 那个旧 Kimi 提交（`c0aeaf0`，已被吸收）也不受影响。
+**顺带记一条**：1.24.0 的 `git cherry` 里重放的那 34 个提交**没有一个**因为「上游做了同一件事」变成 `-`——
+`SU*` 两边一致那半截（1.19.0 吸收）也仍然只是「不需要维护」，没到「可以删」。
 
 ## 维护
 
