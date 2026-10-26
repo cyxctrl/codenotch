@@ -154,6 +154,42 @@ final class XyTokenUsageTests: XCTestCase {
                           "one window cannot be both the headline and the weekly ring")
     }
 
+    /// The sign-in must be able to *complete* on its own. Without a probe the
+    /// sheet marked itself signed in the moment it opened — still on the login
+    /// page — and the first fetch from there answered 401 and cleared the flag,
+    /// which nothing set back after the login actually succeeded: the close
+    /// path only confirms a site that has a probe. The probe is also what makes
+    /// `X-Auth-Session`'s `session.sid` an identity the account switch can
+    /// compare, so it has to report a fingerprint, not just a boolean.
+    func testSiteConfirmsSignInWithAPollingProbe() throws {
+        let probe = try XCTUnwrap(Sites.xytoken.authProbeScript,
+                                  "xytoken must confirm a sign-in, not assume it")
+        XCTAssertTrue(Sites.xytoken.pollsDuringSignIn,
+                      "a probe that is never polled still cannot commit a sign-in")
+        XCTAssertTrue(probe.contains("session.sid"),
+                      "the probe must report the session identity an account switch changes")
+        XCTAssertTrue(probe.contains("authenticated"))
+    }
+
+    /// The fetch has to speak the station's rotation contract, not merely hit
+    /// the endpoint. `X-Auth-Session` is what makes this client look like the
+    /// page whose cookie it shares — a browser keeps it and holds a session for
+    /// weeks, while this app refreshed without it and lost the session twice —
+    /// and the two `409` codes are what the station answers instead of a token
+    /// when two clients rotate the same cookie. Drop any of the three and the
+    /// fetch quietly regresses to the shape that was being revoked.
+    func testFetchFollowsTheStationsRotationContract() {
+        let script = Sites.xytoken.script
+        XCTAssertTrue(script.contains("X-Auth-Session"),
+                      "a refresh without its session identity is the bootstrap path, not a steady state")
+        XCTAssertTrue(script.contains("AUTH_REFRESH_RACE"))
+        XCTAssertTrue(script.contains("AUTH_SESSION_MISMATCH"))
+        XCTAssertTrue(script.contains("session.sid"),
+                      "the identity has to be learned and replayed, not just handled")
+        XCTAssertTrue(script.contains("X-Request-Id"),
+                      "the response id is what makes a refusal traceable in the station's own log")
+    }
+
     /// The cycle length comes from the limit's own period. `window_start` is
     /// unusable for this — in the recorded capture it is the instant of the
     /// call, which would make the day window 8.14 h long and leave the pace
