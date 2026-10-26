@@ -432,6 +432,12 @@ on the bar within a second or two rather than up to five minutes later),
 opening the menu bar item's menu, and putting the pointer on a ring. The last
 two are spaced — hovering four rings in four seconds is one reading, not four.
 
+While the **screen is asleep** — the machine in a dark wake, or a display that
+timed out with the Mac still awake — nothing is asked at all: there is nobody to
+read a figure that has gone stale, and a web session does not spend a refresh
+rotation seconds before the system suspends. The schedule picks up on the first
+tick after the screen comes back, so a wake still shows current numbers.
+
 The reset countdown is drawn against a clock, not against the last reading, so
 it is right to the second whether or not anything has been fetched: the card
 counts down once a second while it is open, and the menu bar item counts the
@@ -456,6 +462,57 @@ unified log.
 ```sh
 /usr/bin/log stream --predicate 'subsystem == "com.vinz.codenotch"' --level debug
 ```
+
+That stream is also where a **refusal** is recorded. When a browser-session
+provider — XyToken, DeepSeek, QianwenAI, Qoder, MiniMax, Perplexity — asks you
+to sign in again, the app is acting on a response the site returned, and the
+line says which one:
+
+```sh
+/usr/bin/log show --last 1h --style compact \
+  --predicate 'subsystem == "com.vinz.codenotch"' | grep needsAuth
+```
+
+It carries the provider id, the HTTP status, and the site's own error body
+where that is safe to record:
+
+```
+xytoken needsAuth: HTTP 401 request=XY20261022023237926895330150e9dd6YmQk4ZHz {"success":false,"message":"Unauthorized","code":"AUTH_SESSION_REVOKED"}
+```
+`request=` is the station's own `X-Request-Id` for the response that refused the
+app. It is the handle its server log can be searched by, and it is the first
+thing to quote when a session ends for a reason this side cannot see. The
+`session ->` line below carries the same id for the last refresh that succeeded,
+so a working session and a dying one can both be found on the station's side.
+
+Those codes are the difference between an account problem and an app problem:
+
+| Code | What it means |
+|---|---|
+| `AUTH_UNAUTHORIZED` | The session is gone or has expired — signing in again is the whole fix. |
+| `AUTH_SESSION_REVOKED` | The session was ended from somewhere else: **Sign out other sessions** on another device, a per-session revoke on the station's Login sessions page, or the station's own defence against a refresh token being replayed. Compare the log's timestamp against that page before assuming the app did it. |
+| `AUTH_ORIGIN_FORBIDDEN`, `AUTH_SESSION_MISMATCH` | The request is the problem, not the account — worth reporting with the log line. |
+| `AUTH_REFRESH_RACE` | Two clients rotated the same cookie at once. The app retries once, so a line here means the retry lost as well. |
+
+A request that fails for any other reason is written the same way, as
+`request failed: HTTP <status> …`, and a fetch the WebView could not complete at
+all arrives as `HTTP 0` carrying the script's own error text. That used to be an
+anonymous "JavaScript exception" — a rejected `fetch`, which is what a suspended
+WebView looks like after a wake, said nothing about which part had failed.
+
+When a site's script refreshes the session, one more line records what the
+station says its lifetime is:
+
+```
+xytoken session -> created=1789… last_active=1792… expires=1792… request=XY20261022023237…
+```
+
+`last_active` moving is the session being kept alive; `expires` is the station's
+own answer to "how long is this good for", which is worth reading before
+believing any assumption about it.
+
+DeepSeek and QianwenAI return account detail alongside the numbers, so their
+bodies are never written to the log; for those the line stops at the status.
 
 ## Contributing
 

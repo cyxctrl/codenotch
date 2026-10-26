@@ -236,6 +236,17 @@ final class WebSessionProvider: NSObject, UsageProvider {
         site.sessionKey ?? "\(site.id).signedIn"
     }
 
+    /// Whether this site's response body may be written to the log.
+    ///
+    /// `Site.logsResponseBody` is the site's own instruction, and two sites
+    /// carry account detail beyond the numbers without having said so when the
+    /// flag was added — DeepSeek's summary and QianwenAI's console envelope —
+    /// so they are named here rather than trusted to opt out. One rule for the
+    /// success line and the refusal line alike.
+    private var logsResponseBody: Bool {
+        site.logsResponseBody && !["deepseek", "qianwenai"].contains(site.id)
+    }
+
     private var hasSignedIn: Bool {
         get { UserDefaults.standard.bool(forKey: Self.sessionKey(for: site)) }
         set { UserDefaults.standard.set(newValue, forKey: Self.sessionKey(for: site)) }
@@ -369,6 +380,12 @@ final class WebSessionProvider: NSObject, UsageProvider {
             )
         } catch {
             Log.usage.error("\(self.site.id, privacy: .public) fetch script failed: \(error.localizedDescription, privacy: .public)")
+            // The page did not answer. Whether the network, the web content
+            // process or the document is at fault, firing the next fetch into
+            // the same view repeats it: a run of these — which is what a wake
+            // left behind here, five in a row over two hours — is a stale page,
+            // and only a load replaces it. The next attempt starts with one.
+            isLoaded = false
             throw UsageProviderError.badResponse(status: 0)
         }
 
@@ -380,25 +397,60 @@ final class WebSessionProvider: NSObject, UsageProvider {
               let body = envelope["body"] as? String
         else {
             Log.usage.error("\(self.site.id, privacy: .public) response unreadable: \(String(describing: result), privacy: .public)")
+            // An envelope this shape is never right, so the document is not the
+            // one this script expects. Same rule as a failed script: reload.
+            isLoaded = false
             throw UsageProviderError.badResponse(status: 0)
         }
 
         if let failure = Self.responseFailure(status: status, site: site) {
-            if case .needsAuth = failure { hasSignedIn = false }
+            // The refusal line is the one that explains a ring going blank, and
+            // it used to be written for `needsAuth` alone — before the body was
+            // recorded — so a session dying left no trace of *why*. The body is
+            // what names the station's reason (`AUTH_SESSION_REVOKED`,
+            // `AUTH_ORIGIN_FORBIDDEN`, …); a 409 from a routed refresh and a
+            // bare 500 are different problems too, and both now say so.
+            //
+            // `request=` is the station's `X-Request-Id` for the response that
+            // refused us: the only handle its own server log can be searched
+            // by, and the first thing to ask for when a session ends for a
+            // reason this side cannot see.
+            let requestID = (envelope["requestId"] as? String)
+                .flatMap { $0.isEmpty ? nil : $0 }
+                .map { " request=\($0)" } ?? ""
+            let reason = logsResponseBody
+                ? "HTTP \(status)\(requestID) \(body.prefix(300))"
+                : "HTTP \(status)\(requestID)"
+            if case .needsAuth = failure {
+                Log.usage.error("\(self.site.id, privacy: .public) needsAuth: \(reason, privacy: .public)")
+                hasSignedIn = false
+            } else {
+                Log.usage.error("\(self.site.id, privacy: .public) request failed: \(reason, privacy: .public)")
+            }
             throw failure
         }
 
         // Recorded verbatim so a parser can be written against the real thing.
         // Not for sites whose response carries account details beyond the
         // numbers: DeepSeek's, and QianwenAI's console envelope, whose other
-        // fields are undocumented.
-        if !site.logsResponseBody || ["deepseek", "qianwenai"].contains(site.id) {
+        // fields are undocumented. The same rule governs the failure line
+        // above, so a refusal cannot leak through the other path.
+        if !logsResponseBody {
             Log.usage.notice("\(self.site.id, privacy: .public) usage response received")
         } else {
             Log.usage.notice("\(self.site.id, privacy: .public) usage -> \(body.prefix(1200), privacy: .public)")
         }
         if let probes = envelope["probes"] as? String {
             Log.usage.notice("\(self.site.id, privacy: .public) probes -> \(probes.prefix(2600), privacy: .public)")
+        }
+        // What the station thinks this session's lifetime is, when the site's
+        // script refreshed on this fetch. Timestamps only — no token, no sid —
+        // and the answer to "did it expire, or was it revoked" without a packet
+        // capture. Written even for sites that withhold their bodies: the
+        // numbers are not account detail, and a lifetime is the thing a session
+        // report is missing.
+        if let session = envelope["session"] as? String {
+            Log.usage.notice("\(self.site.id, privacy: .public) session -> \(session.prefix(300), privacy: .public)")
         }
 
         let windows: [LimitWindow]

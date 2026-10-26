@@ -269,6 +269,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             miniMaxWeb.onAuthenticated = { [weak store] in
                 store?.providerAuthenticationChanged(providerID: "minimax")
             }
+            xytoken.onAuthenticated = { [weak store] in
+                store?.providerAuthenticationChanged(providerID: "xytoken")
+            }
 
             let updater = Updater()
             self.updater = updater

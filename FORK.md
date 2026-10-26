@@ -757,6 +757,51 @@ upstream 单独加，与 fork 不相邻，自动合并干净）。
 每周限额作为主圆环、周限额提醒）对 XyToken 生效——此前它们对它静默不生效。菜单栏那条不算：它对 xytoken
 结构性不适用（见上面的「外观配置同步规则」）。
 
+XyToken 的登录态修复（**非 rebase**，1.23.0 之后）：站点把 refresh 升级成会话绑定的轮换
+（`X-Auth-Session` / `409 AUTH_REFRESH_RACE` / `AUTH_SESSION_MISMATCH`，登录会话还有数量上限），
+而 `static let xytoken` 当时是**没有 `authProbeScript` 的两个站点之一**（另一个是 Perplexity，同样的问题还没动）：
+`signInSheetDidOpen()` 在窗口刚打开（还停在登录页）就把 `hasSignedIn` 置 true，此后任意一次抓取
+（闲置 5 分钟 / 看环 15 秒 / 开设置 / Refresh now）都会拿到 401 把它清回 false；登录成功后没有任何
+路径置回 true（`windowWillClose` 的最终确认要求站点有 probe）。表象就是「登录了还是未登录、必须再点一次」。
+修法沿用 deepseek/qianwen 的模式：`authProbeScript`（调 `/refresh`，用 `data.session.sid` 当
+fingerprint）+ `pollsDuringSignIn: true`，并在 `AppDelegate` 接上 `onAuthenticated` →
+`providerAuthenticationChanged` 以便登录后立刻出数。同一笔改动里把 bearer token 缓存到页面全局
+（`window.__codenotchXyToken`，按 `access_expires_at` 过期），因为 access_token 有 15 分钟而闲置抓取是
+5 分钟一次——少掉的轮换就是少掉的和页面自身 refresh 撞车的机会；缓存 token 撞 401 时会先换一次再判定掉线，
+避免把「会话真没了」和「缓存 token 恰好过期」混为一谈。401/403 现在会带 `AUTH_*` 响应体写进
+`Log.usage.error`（此前该分支在记录 body 之前就 throw，掉线在日志里没有痕迹）。
+
+紧接着的一次真机掉线把上面的判断修了一半（**仍是非 rebase**）：日志里不是 `AUTH_UNAUTHORIZED`，而是
+`AUTH_SESSION_REVOKED`——服务端明说这条会话被**撤销**，不是到期；同一账号在 Edge 里一周不掉，说明寿命/
+空闲/会话上限都不是原因，被撤的只是"我们这个客户端"这条会话。与浏览器唯一的实质差别是刷新姿势：浏览器
+页面首次 bootstrap 之后，每次 `/refresh` 都带 `X-Auth-Session: <session.sid>`，而我们的脚本体永远不带，
+还每 15 分钟刷一次——站台的轮换契约（`AUTH_REFRESH_RACE`/`AUTH_SESSION_MISMATCH`）本来就是给"同一 cookie
+上有多个客户端"准备的。所以 `Site.script` 补成照站台客户端的样子：记下 `data.session.sid` 并在后续刷新里
+带回去，`409 AUTH_REFRESH_RACE` 隔 150ms 重试一次、`409 AUTH_SESSION_MISMATCH` 丢掉 sid 退回 bootstrap，
+`401/403` 清掉 token 与 sid；整段包 `try/catch` 返回 `status: 0` + `script error: …`（崩溃/睡眠后
+`fetch` 被拒以前只留一句"发生了JavaScript异常"，看不出是哪一层）；refresh 成功时把
+`session.created_at / last_active_at / expires_at` 塞进 envelope，由 `WebSessionProvider` 记成
+`session -> …` 一行。另外 `fetch script failed` / `response unreadable` 现在会把 `isLoaded` 置 false，
+下一次先重载页面——真机日志里 08:22–10:02 连续 5 次失败正是"往同一个卡住的 WebView 里反复发"。
+**判据记住：`needsAuth` 这行现在带站点自己的 `code`，先看它再猜原因。**
+
+带 sid 的版本上线后仍然在 10-22 掉了一次（约 22.7 小时后），说明 sid 不是全部原因。于是补上最后一件可对接的
+东西：响应的 `X-Request-Id`。脚本把每次响应头里的 id 带进 envelope，失败行是
+`needsAuth: HTTP 401 request=XY… {body}`，成功刷新的 `session ->` 行末尾也带 `request=XY…`。站台自己的
+请求日志能按这个 id 查到 IP/UA/触发了哪条撤销分支——**这是 App 侧唯一够不着的证据**，下次掉线先拿 id，
+再谈假设。id 本身前 16 位是 UTC 时间戳（`XY` + `yyyyMMddHHmmss`），没有服务端日志时也能先定位到分钟。
+
+再往后一次掉线（10-25，登录后约 48.8–53.5h）拿到了完整时间线，方向又变了一次，**并且这次动到了
+upstream 的文件**：`pmset -g log` 显示 12:57:00 那次成功刷新和"Entering Sleep"同一秒，之后 4h50
+只有每次 2 秒的 DarkWake、App 一个请求都没发，17:47:01 的 DarkWake 里第一次联系服务端就拿到
+`401 AUTH_SESSION_REVOKED`（request id `XY20261025094703…`）。10-21 那次形状完全一样。但**"DarkWake 里
+刷新后立刻睡"本身不是充分条件**：同一条会话在 04:30/06:09/07:18/11:55 都做过同样的事且活了下来，
+所以别把它当成已证实的因果。据此在 `Sources/Model/UsageStore.swift` 加了一条**通用**规则（不是 xytoken
+专属）：`displayIsAsleep`（默认 `CGDisplayIsAsleep(CGMainDisplayID()) != 0`，测试可注入）为真时
+`tick()` 和 `didWake` 都不抓取，`lastAttempt` 不动——屏幕亮起来后的第一个 tick 直接补一次。理由有二：
+屏幕灭着没人看；以及一个网页会话不该在系统挂起前几秒花掉一次 cookie 轮换。**rebase 注意**：
+`UsageStore.swift` 是冲突热点，这条改动在 `tick()` 开头和 `wakeObserver` 闭包里，上游改这两处时两边都留。
+
 **踩过的坑（务必记牢）**：第一版直接拿整个 `rule_key` 当窗口 id，而且照抄了测试 fixture——fixture
 自述「rewrites ids」、把 `rule_key` 也改成了 `week:1|day:1,00:00`，于是**测试全绿、线上却失配**。线上每周窗口
 的真实 id 是 `week:1|week:MON 00:00`，`weeklyID` 匹配不上 → `weeklyWindow` 为 nil → 周环与周读数都不画
