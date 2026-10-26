@@ -188,6 +188,22 @@ final class UsageStore: ObservableObject {
     private let onLookInterval: TimeInterval
     private let pollingNow: () -> Date
 
+    /// Whether the display is asleep, which covers two states: a dark wake
+    /// (the machine is up for maintenance with nothing on screen) and a display
+    /// that timed out while the machine stayed awake.
+    ///
+    /// Nothing is visible in either, so no reading is owed — and there is a
+    /// reason not to ask anyway. A browser-session provider rotates its refresh
+    /// cookie on every call, and a rotation that lands in the second before the
+    /// system sleeps is one WebKit may never get to write down. The next
+    /// contact then presents a cookie the station has already consumed, which is
+    /// the replay its `AUTH_SESSION_REVOKED` exists to stop. Both XyToken
+    /// sessions lost so far had exactly that shape: the last refresh and
+    /// "Entering Sleep" share a timestamp, and the revocation is discovered on
+    /// the first contact after the sleep — with the machine's own power log
+    /// showing nothing but two-second dark wakes in between.
+    private let displayIsAsleep: () -> Bool
+
     private let archive: UsageArchive
     private var lastGood: [String: (snapshot: ProviderSnapshot, fetchedAt: Date)] = [:]
     private var timer: Timer?
@@ -237,9 +253,14 @@ final class UsageStore: ObservableObject {
         archive: UsageArchive = UsageArchive(),
         disconnected: Set<String> = [],
         order: [String] = [],
-        pollingNow: @escaping () -> Date = Date.init
+        pollingNow: @escaping () -> Date = Date.init,
+        // Read as "is the screen dark", which is the only thing the caller
+        // needs to know. Swapped in tests so a schedule can be exercised
+        // without a display.
+        displayIsAsleep: @escaping () -> Bool = { CGDisplayIsAsleep(CGMainDisplayID()) != 0 }
     ) {
         self.pollingNow = pollingNow
+        self.displayIsAsleep = displayIsAsleep
         self.providers = providers
         self.refreshInterval = refreshInterval
         self.busyRefreshInterval = busyRefreshInterval
@@ -371,10 +392,18 @@ final class UsageStore: ObservableObject {
         // Waking up is the one moment the numbers are guaranteed to be wrong —
         // and the one moment a cache is guaranteed to be wrong with them, having
         // been written before the Mac went to sleep. So: live.
+        //
+        // A *dark* wake is not a wake, though: the display is off and the
+        // machine is likely to go straight back to sleep, which is the one
+        // moment a refresh must not be spent (see `displayIsAsleep`). The tick
+        // picks the reading up again as soon as the screen is on.
         wakeObserver = NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didWakeNotification, object: nil, queue: .main
         ) { [weak self] _ in
-            MainActor.assumeIsolated { _ = self?.refreshNow(freshness: .live) }
+            MainActor.assumeIsolated {
+                guard let self, !self.displayIsAsleep() else { return }
+                _ = self.refreshNow(freshness: .live)
+            }
         }
 
         // A window's `label` is display text a provider resolved while it was
@@ -413,6 +442,10 @@ final class UsageStore: ObservableObject {
 
     /// Decides whether this tick is worth a request at all.
     private func tick() {
+        // A dark wake leaves `lastAttempt` where it was, so the first tick after
+        // the screen comes on clears the whole idle interval at once — the
+        // schedule resumes on the wake instead of five minutes into it.
+        guard !displayIsAsleep() else { return }
         let now = pollingNow()
         let waited = lastAttempt.map { now.timeIntervalSince($0) } ?? .greatestFiniteMagnitude
         let rolledOver = Self.hasWindowRolledOver(in: snapshots, since: lastAttempt, at: now)

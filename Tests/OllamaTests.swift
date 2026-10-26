@@ -674,7 +674,10 @@ final class OllamaLifecycleTests: XCTestCase {
         let cloud = QuotaStub()
         let store = UsageStore(providers: [cloud, local], refreshInterval: 0.02,
                                idleRefreshInterval: 0.05, archive: UsageArchive(defaults: isolatedDefaults()),
-                               pollingNow: { now })
+                               // The tick under test must run on any machine,
+                               // including one whose display is asleep (a
+                               // headless run, a closed lid over ssh).
+                               pollingNow: { now }, displayIsAsleep: { false })
         store.refreshLocalRuntimes()
         await started(local)
         XCTAssertEqual(cloud.calls, 0)
