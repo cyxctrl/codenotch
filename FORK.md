@@ -881,6 +881,45 @@ fixture 只保证它自己内部一致。**
 `testSiteWindowRolesResolveToTheParsedWindows` 钉住 site 声明与 parser 产出一致。清单与判据见上面的
 「外观配置同步规则」。
 
+### 第四轮掉登录（10-29）：不是会话没了，是站台要二次验证
+
+真机日志只给了一个新的东西：`xytoken needsAuth: HTTP 403 request=XY20261029053233… {"success":false,
+"message":"需要完成多因素认证","data":{"methods":["2fa"],"need_setup":false,"require_admin_mfa":true},
+"code":"ADMIN_MFA_REQUIRED"}`。前后的 `session ->` 行说明会话 10-26 14:15 建立、30 天到 11-25 才到期、
+10-28 18:29 还在正常轮换；用户自己在站台后台看到**这条会话依然存在**（最后活跃、登录方式：密码）。
+所以既不是撤销也不是过期——站台把管理员 MFA 改成了**按角色要求**（它的前端文案：
+"The legacy administrator MFA setting is no longer used. Configure Require MFA on each role."），
+一条没做过二次验证的会话在 `/refresh` 上被 403 挡住，会话本身还活着。
+
+两个后果，两个修法：
+
+1. **探针判了半个登录，把验证码输入页关掉了**（用户原话：登录后刚要输 MFA 码，窗口就被关了）。
+   站台的前端 `isAuthBundle` 要求 `access_token` + `user` + `session` 三样齐全才叫已登录，而等验证码期间
+   `/refresh` 会回 200 并带上 `session.sid`——我们的 `authProbeScript` 只看 `session.sid`，于是提交了
+   一个站点还没完成的登录，`authenticationDidComplete()` 关窗。修法：探针改判「整包」（与站台同一条判据），
+   不再是 `r.ok && sid`。`Tests/XyTokenUsageTests.swift` 里新增 JavaScriptCore 行为测试（stub `fetch`，
+   按 `callAsyncJavaScript` 的方式跑脚本），钉住三种输入：整包 → `authenticated: true`、只有 session 的
+   200 → false、`403 ADMIN_MFA_REQUIRED` → false。**教训：门槛要比站台自己更宽吗？不行——上游前端怎么判，
+   客户端就怎么判；`sid` 只是身份，不是登录完成。**
+
+2. **403 一律记成 `needsAuth`，日志分不出"会话没了"和"会话在等验证码"**。`Site` 新增 `mfaCodes`（默认空，
+   只有 xytoken 声明 `["ADMIN_MFA_REQUIRED"]`），`WebSessionProvider.stepUpCode(status:body:site:)` 要求
+   **状态是 403 且响应体顶层 `code` 字段命中站点声明**（不是 `body.contains`——同一个码出现在 message 里也会
+   命中；也不是只看状态——`401` 才是真的没了），命中就把那句拒绝写成 `needsMfa: ADMIN_MFA_REQUIRED …` 而不是
+   `needsAuth:`。
+
+   **行为一个字没改，这是有意的**：先试过让 step-up 抛 `apiError` 并保留 last-good 读数，验收时发现两处都
+   不成立——`UsageStore.needsSignIn` 对 `.modal` 只在快照是 `.needsAuth` 时返回 true，于是设置页会显示
+   "已登录"且**没有登录按钮**（人要打开验证窗的唯一入口就没了）；而 `.apiError` 在有 last-good 读数时走
+   `degraded()`，界面保留旧快照与旧状态，`statusMessage` 更是 `hasReading` 时直接返回 nil，那句提示根本
+   显示不出来。要让界面说"需要二次验证"就得给 `ProviderStatus`/`UsageStore`/`SettingsView` 加一个新状态，
+   那是 upstream 冲突热点（见第 6 节），换不来对应的收益——`.needsAuth` 本来就让人点 Sign in，而验证窗
+   正是那个按钮打开的东西。所以这一轮只把**日志**说清楚，界面照旧。
+
+**已知的收尾摩擦（写在这里以免下次又被当成新 bug）**：探针只在**页面 URL 变化**时才跑（不能盲探——xytoken 的
+`/refresh` 会轮换 cookie，1.5 秒一次会和页面自己的 refresh 抢）。所以在同一个 URL 上完成 2FA 时，探针不会自己
+再跑一遍：SPA 验证完通常会跳转，跳转即提交；**没跳转就手动关窗**，`windowWillClose` 会做最后一次探针并提交。
+
 ## 6. 浏览器会话 provider 的登录提示修复
 
 **为什么存在**：`WebSessionProvider` 没有账号元数据。upstream 的设置页把「没有 account」

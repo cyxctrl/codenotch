@@ -532,6 +532,14 @@ enum Sites {
             return JSON.stringify({ authenticated: true, fingerprint: session.sid });
         } catch (_) { return JSON.stringify({ authenticated: false }); }
         """#,
+        // The station moved its administrator MFA to a per-role requirement
+        // ("Require MFA" on each role), and answers a session that has not
+        // verified yet with `403 ADMIN_MFA_REQUIRED` — while still holding
+        // that session, which is why its own session list shows it alive. The
+        // app read that as a lost login, blanked the ring and stopped asking
+        // (2026-10-29). Only this code: a `401` still means the session is
+        // gone, and the other `403`s still mean the request was refused.
+        mfaCodes: ["ADMIN_MFA_REQUIRED"],
         pollsDuringSignIn: true,
         // Role declarations, by the window ids `XyTokenUsage` derives — the
         // stable half of the station's `rule_key` (`day:1`, `week:1`), never the

@@ -470,7 +470,7 @@ line says which one:
 
 ```sh
 /usr/bin/log show --last 1h --style compact \
-  --predicate 'subsystem == "com.vinz.codenotch"' | grep needsAuth
+  --predicate 'subsystem == "com.vinz.codenotch"' | grep -E 'needsAuth|needsMfa'
 ```
 
 It carries the provider id, the HTTP status, and the site's own error body
@@ -493,6 +493,22 @@ Those codes are the difference between an account problem and an app problem:
 | `AUTH_SESSION_REVOKED` | The session was ended from somewhere else: **Sign out other sessions** on another device, a per-session revoke on the station's Login sessions page, or the station's own defence against a refresh token being replayed. Compare the log's timestamp against that page before assuming the app did it. |
 | `AUTH_ORIGIN_FORBIDDEN`, `AUTH_SESSION_MISMATCH` | The request is the problem, not the account — worth reporting with the log line. |
 | `AUTH_REFRESH_RACE` | Two clients rotated the same cookie at once. The app retries once, so a line here means the retry lost as well. |
+
+A refusal that asks for a **second factor** is written as `needsMfa:` instead,
+and it is not a lost login:
+
+```
+xytoken needsMfa: ADMIN_MFA_REQUIRED HTTP 403 request=XY20261029053233… {"success":false,"message":"需要完成多因素认证","data":{"methods":["2fa"],"need_setup":false,"require_admin_mfa":true},"code":"ADMIN_MFA_REQUIRED"}
+```
+
+XyToken moved administrator MFA to a per-role requirement, and a session that
+has not verified yet is still a live session — the station's own Login sessions
+page keeps listing it, last active, which is exactly what makes this look like a
+random logout. Nothing on this side can answer it: open **Sign in**, complete the
+code in the window that opens, and the app commits the sign-in as usual. The app
+does the same thing it does for any refusal — the panel says sign in again and
+Sign in opens the sheet — so this line is the only place that distinguishes the
+two, and it is the one to read before assuming the session was revoked.
 
 A request that fails for any other reason is written the same way, as
 `request failed: HTTP <status> …`, and a fetch the WebView could not complete at

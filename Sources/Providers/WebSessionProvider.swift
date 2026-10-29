@@ -90,6 +90,17 @@ final class WebSessionProvider: NSObject, UsageProvider {
         let authProbeScript: String?
         let sessionKey: String?
         let forbiddenMessage: String?
+        /// The station's own codes for a refusal that asks for a *second
+        /// factor* rather than for a new login.
+        ///
+        /// A stepped-up session is still a live session: the site answers 403
+        /// with one of these while it holds the login and waits for a code
+        /// (XyToken's `ADMIN_MFA_REQUIRED` under its per-role MFA, 2026-10-29).
+        /// It changes nothing about what the app does — a refusal is a refusal,
+        /// and `.needsAuth` is what opens the sheet that can answer it — only
+        /// about what the refusal line says, which is the difference between
+        /// "the session is gone" and "the session is waiting for you".
+        let mfaCodes: [String]
         let logsResponseBody: Bool
         /// Extra hosts whose website data is cleared on sign-out, besides
         /// `origin.host`. MiniMax's session is created on the platform origin
@@ -127,6 +138,7 @@ final class WebSessionProvider: NSObject, UsageProvider {
              authProbeScript: String? = nil,
              sessionKey: String? = nil,
              forbiddenMessage: String? = nil,
+             mfaCodes: [String] = [],
              logsResponseBody: Bool = true,
              associatedHosts: [String] = [],
              pollsDuringSignIn: Bool = false,
@@ -146,6 +158,7 @@ final class WebSessionProvider: NSObject, UsageProvider {
             self.authProbeScript = authProbeScript
             self.sessionKey = sessionKey
             self.forbiddenMessage = forbiddenMessage
+            self.mfaCodes = mfaCodes
             self.logsResponseBody = logsResponseBody
             self.associatedHosts = associatedHosts
             self.pollsDuringSignIn = pollsDuringSignIn
@@ -360,6 +373,25 @@ final class WebSessionProvider: NSObject, UsageProvider {
         return nil
     }
 
+    /// The station's own code for a refusal that wants a second factor rather
+    /// than a new login, when this site declared it.
+    ///
+    /// `403` and the body's `code` field, both: XyToken answers `401` when the
+    /// session is really gone and `403 ADMIN_MFA_REQUIRED` when it is only
+    /// waiting for a code, while its other `403`s remain plain refusals. The
+    /// status is not enough to tell them apart and neither is a search through
+    /// the body — the same code can appear in a message, so it is read from
+    /// the field the station puts it in.
+    nonisolated static func stepUpCode(status: Int, body: String, site: Site) -> String? {
+        guard status == 403, !site.mfaCodes.isEmpty,
+              let data = body.data(using: .utf8),
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let code = object["code"] as? String,
+              site.mfaCodes.contains(code)
+        else { return nil }
+        return code
+    }
+
     // MARK: - Fetching
 
     func fetchSnapshot() async throws -> ProviderSnapshot {
@@ -422,7 +454,21 @@ final class WebSessionProvider: NSObject, UsageProvider {
                 ? "HTTP \(status)\(requestID) \(body.prefix(300))"
                 : "HTTP \(status)\(requestID)"
             if case .needsAuth = failure {
-                Log.usage.error("\(self.site.id, privacy: .public) needsAuth: \(reason, privacy: .public)")
+                // A refusal that names a second factor is the station keeping a
+                // live session, not losing one — its own Login sessions page
+                // still lists it, last active (2026-10-29). The outcome is the
+                // same either way: the sheet is where a step-up gets answered,
+                // and `.needsAuth` is what makes Sign in open it, so the flag
+                // still goes. Only the log can afford to tell the two apart,
+                // and this is the line to read when the ring goes blank while
+                // the session is demonstrably still there.
+                if let code = Self.stepUpCode(status: status, body: body, site: site) {
+                    Log.usage.error(
+                        "\(self.site.id, privacy: .public) needsMfa: \(code, privacy: .public) \(reason, privacy: .public)"
+                    )
+                } else {
+                    Log.usage.error("\(self.site.id, privacy: .public) needsAuth: \(reason, privacy: .public)")
+                }
                 hasSignedIn = false
             } else {
                 Log.usage.error("\(self.site.id, privacy: .public) request failed: \(reason, privacy: .public)")
