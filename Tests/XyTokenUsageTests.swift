@@ -251,6 +251,27 @@ final class XyTokenUsageTests: XCTestCase {
         XCTAssertEqual(try answer(from: probe, status: 403, body: refused)["authenticated"] as? Bool, false)
     }
 
+    /// A `403` the station spends on a second factor is not a lost login, and
+    /// the panel cannot say which it is — a refusal is a refusal, and Sign in
+    /// opens the same sheet that answers both. The log can, and this is what it
+    /// reads: the status it came with, and the station's own `code` field.
+    func testASteppedUpRefusalIsNamedInTheLog() throws {
+        let body = #"{"success":false,"message":"需要完成多因素认证","code":"ADMIN_MFA_REQUIRED","data":{"methods":["2fa"],"need_setup":false,"require_admin_mfa":true}}"#
+        XCTAssertEqual(WebSessionProvider.stepUpCode(status: 403, body: body, site: Sites.xytoken),
+                       "ADMIN_MFA_REQUIRED")
+        XCTAssertNil(WebSessionProvider.stepUpCode(status: 401, body: body, site: Sites.xytoken),
+                     "a `401` is a lost login whatever its body says about a second factor")
+        XCTAssertNil(
+            WebSessionProvider.stepUpCode(status: 403, body: #"{"code":"AUTH_SESSION_REVOKED"}"#,
+                                          site: Sites.xytoken),
+            "a revoked session is a lost login, not a step-up")
+        XCTAssertNil(WebSessionProvider.stepUpCode(status: 403, body: body, site: Sites.deepSeek),
+                     "only the site that declares the code reads it that way")
+        let quoted = #"{"code":"AUTH_UNAUTHORIZED","message":"ADMIN_MFA_REQUIRED is not configured"}"#
+        XCTAssertNil(WebSessionProvider.stepUpCode(status: 403, body: quoted, site: Sites.xytoken),
+                     "the code named in a message is not the station's `code` field")
+    }
+
     /// The fetch has to speak the station's rotation contract, not merely hit
     /// the endpoint. `X-Auth-Session` is what makes this client look like the
     /// page whose cookie it shares — a browser keeps it and holds a session for
