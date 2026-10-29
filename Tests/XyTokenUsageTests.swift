@@ -1,3 +1,4 @@
+import JavaScriptCore
 import XCTest
 @testable import Codenotch
 
@@ -161,6 +162,12 @@ final class XyTokenUsageTests: XCTestCase {
     /// path only confirms a site that has a probe. The probe is also what makes
     /// `X-Auth-Session`'s `session.sid` an identity the account switch can
     /// compare, so it has to report a fingerprint, not just a boolean.
+    ///
+    /// And it must not complete *too early*. On 2026-10-29 the station, waiting
+    /// for a two-factor code it had not been given, still answered the refresh
+    /// 200 with a session and a `sid` — a probe that stopped there committed a
+    /// sign-in the site had not finished and closed the window on the code
+    /// input, which is the one screen the app cannot get past for the user.
     func testSiteConfirmsSignInWithAPollingProbe() throws {
         let probe = try XCTUnwrap(Sites.xytoken.authProbeScript,
                                   "xytoken must confirm a sign-in, not assume it")
@@ -168,7 +175,80 @@ final class XyTokenUsageTests: XCTestCase {
                       "a probe that is never polled still cannot commit a sign-in")
         XCTAssertTrue(probe.contains("session.sid"),
                       "the probe must report the session identity an account switch changes")
+        XCTAssertTrue(probe.contains("access_token"),
+                      "a session alone is not a sign-in: the station waits for a code behind one")
         XCTAssertTrue(probe.contains("authenticated"))
+    }
+
+    /// Runs a site script the way `callAsyncJavaScript` does — as an async
+    /// function body — against a stubbed `fetch`, and returns what it answered.
+    private func answer(
+        from script: String,
+        status: Int = 200,
+        body: String
+    ) throws -> [String: Any] {
+        let context = try XCTUnwrap(JSContext(), "JavaScriptCore is how the sheet runs this")
+        let literal = try XCTUnwrap(String(data: try JSONEncoder().encode(body), encoding: .utf8))
+        // `window` is what the scripts treat as the page; in a bare context the
+        // only page there is is the global object.
+        let harness = """
+        var window = globalThis;
+        var __result = 'PENDING';
+        var __reply = { ok: \(status >= 200 && status < 300), status: \(status), body: \(literal) };
+        var fetch = function () {
+            return Promise.resolve({
+                ok: __reply.ok,
+                status: __reply.status,
+                headers: { get: function () { return ''; } },
+                text: function () { return Promise.resolve(__reply.body); }
+            });
+        };
+        (async function () {
+            __result = await (async function () {
+        \(script)
+            })();
+        })();
+        """
+        context.evaluateScript(harness)
+        let raw = try XCTUnwrap(context.objectForKeyedSubscript("__result")?.toString(),
+                                "the script answered nothing: \(String(describing: context.exception))")
+        XCTAssertNotEqual(raw, "PENDING", "the script never settled")
+        let data = try XCTUnwrap(raw.data(using: .utf8))
+        return try XCTUnwrap(
+            JSONSerialization.jsonObject(with: data) as? [String: Any],
+            "expected a JSON envelope, got \(raw)"
+        )
+    }
+
+    /// The station's own definition of signed in, from its console's
+    /// `isAuthBundle`: access token, user, session. All three, or the sheet
+    /// stays open.
+    func testProbeCommitsOnlyAWholeAuthBundle() throws {
+        let probe = try XCTUnwrap(Sites.xytoken.authProbeScript)
+        let bundle = """
+        {"success":true,"data":{
+            "access_token":"an-access-token","token_type":"Bearer",
+            "access_expires_at":4102444800,
+            "user":{"id":42,"username":"someone","role":1},
+            "session":{"sid":"s-1","current":true,"login_method":"password"}}}
+        """
+        let answer = try answer(from: probe, body: bundle)
+        XCTAssertEqual(answer["authenticated"] as? Bool, true)
+        XCTAssertEqual(answer["fingerprint"] as? String, "s-1",
+                       "the fingerprint is the identity an account switch has to change")
+    }
+
+    /// The refusal that started this: a pending second factor comes back as a
+    /// session without the token the console would need.
+    func testProbeRefusesASessionThatIsOnlyAPendingSignIn() throws {
+        let probe = try XCTUnwrap(Sites.xytoken.authProbeScript)
+        let pending = #"{"success":true,"data":{"session":{"sid":"s-1","current":true}}}"#
+        XCTAssertEqual(try answer(from: probe, body: pending)["authenticated"] as? Bool, false,
+                       "a session with no access token is the two-factor screen, not a sign-in")
+        let noUser = #"{"success":true,"data":{"access_token":"t","session":{"sid":"s-1"}}}"#
+        XCTAssertEqual(try answer(from: probe, body: noUser)["authenticated"] as? Bool, false)
+        let refused = #"{"success":false,"code":"ADMIN_MFA_REQUIRED","data":{"methods":["2fa"],"need_setup":false,"require_admin_mfa":true}}"#
+        XCTAssertEqual(try answer(from: probe, status: 403, body: refused)["authenticated"] as? Bool, false)
     }
 
     /// The fetch has to speak the station's rotation contract, not merely hit

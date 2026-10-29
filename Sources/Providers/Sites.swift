@@ -362,6 +362,13 @@ enum Sites {
     /// probe). The probe also reports `session.sid`, the identity an account
     /// switch has to change.
     ///
+    /// What counts as signed in is the station's own definition, not "the
+    /// refresh succeeded and a session came back": its console only accepts a
+    /// *bundle* — access token, user, session — and it keeps the two-factor
+    /// form on screen while it is merely a session. A probe that stops at
+    /// `sid` committed a sign-in the site had not finished and closed the
+    /// window on the code input (2026-10-29).
+    ///
     /// The body is wrapped in try/catch and reports a `0` status instead of
     /// throwing: a rejected `fetch` — which is what a suspended WebView looks
     /// like after a wake — used to surface as an opaque "JavaScript exception"
@@ -505,9 +512,24 @@ enum Sites {
                 headers: { 'Accept': 'application/json' }
             });
             if (!r.ok) return JSON.stringify({ authenticated: false });
-            let sid = null;
-            try { sid = JSON.parse(await r.text()).data.session.sid; } catch (_) {}
-            return JSON.stringify({ authenticated: !!sid, fingerprint: sid });
+            let data = null;
+            try { data = JSON.parse(await r.text()).data; } catch (_) {}
+            // A session is not a sign-in. While the station waits for a second
+            // factor it has already minted one — `sid` and all — and answers
+            // this refresh `200`, but without the access token and user its own
+            // console needs. Its frontend calls that "not signed in"
+            // (`isAuthBundle`) and keeps the verification form on screen, so
+            // committing on `sid` alone closed the window on the code input
+            // (2026-10-29) — the one screen the app cannot get past for the
+            // user. Ask for the same bundle the station asks itself for.
+            const user = data && data.user;
+            const session = data && data.session;
+            const signedIn = !!data
+                && typeof data.access_token === 'string' && data.access_token.length > 0
+                && !!user && Number(user.id) > 0
+                && !!session && typeof session.sid === 'string' && session.sid.length > 0;
+            if (!signedIn) return JSON.stringify({ authenticated: false });
+            return JSON.stringify({ authenticated: true, fingerprint: session.sid });
         } catch (_) { return JSON.stringify({ authenticated: false }); }
         """#,
         pollsDuringSignIn: true,
