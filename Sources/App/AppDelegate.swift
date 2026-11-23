@@ -254,9 +254,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 // order for a frame and then visibly shuffles.
                 order: preferences.providerOrder
             )
+            // The handler is bound here and the store read inside it: Swift 5.10
+            // refuses a `weak` capture read from a nested `Task {}` ("reference to
+            // captured var 'store' in concurrently-executing code"), so the weak
+            // unwrap happens once, outside the Task.
             self.manualProvider?.onChanged = { [weak store] in
+                guard let store else { return }
                 Task { @MainActor in
-                    _ = store?.refresh(providerID: "manual")
+                    _ = store.refresh(providerID: "manual")
                 }
             }
             preferences.$customEndpoints

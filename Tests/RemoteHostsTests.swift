@@ -876,10 +876,14 @@ final class CodexRemoteProviderTests: XCTestCase {
     }
 
     func testAProxiedHostIsNotAskedAgainEveryTick() async throws {
-        var commands: [String] = []
+        // `final class Box`, not `var`: the runner is a concurrently-executing
+        // closure, and Swift 5.10 refuses to mutate a captured `var` in one
+        // ("mutation of captured var 'commands' in concurrently-executing code").
+        final class Box { var value: [String] = [] }
+        let commands = Box()
         let config = "model_provider = \"cliproxy\"\n[model_providers.cliproxy]\nbase_url = \"http://127.0.0.1:8317/v1\"\n"
         let provider = makeProvider(answers: []) { _, command in
-            commands.append(command)
+            commands.value.append(command)
             return command.hasSuffix("config.toml")
                 ? Result(exitCode: 0, stdout: Data(config.utf8), stderr: "")
                 : Result(exitCode: 1, stdout: Data(), stderr: "No such file\n")
@@ -894,9 +898,9 @@ final class CodexRemoteProviderTests: XCTestCase {
                 XCTFail("wrong error: \(error)")
             }
         }
-        XCTAssertEqual(commands.count, 2, "the second tick reuses the finding: \(commands)")
+        XCTAssertEqual(commands.value.count, 2, "the second tick reuses the finding: \(commands.value)")
         _ = try? await provider.fetchSnapshot(freshness: .fromSource)
-        XCTAssertEqual(commands.count, 4, "Refresh now looks again: \(commands)")
+        XCTAssertEqual(commands.value.count, 4, "Refresh now looks again: \(commands.value)")
     }
 
     func testUnauthorizedReReadsOnceThenNeedsAuth() async throws {

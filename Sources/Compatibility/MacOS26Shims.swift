@@ -60,9 +60,53 @@ extension View {
         #endif
     }
 
+    /// Reports a geometry-derived value when it changes, in the shape upstream
+    /// writes for `onGeometryChange(for:_:action:)`.
+    ///
+    /// That modifier is macOS 15's, and the macOS 14 SDK this machine builds
+    /// with does not have the symbol at all — the same "`#available` cannot
+    /// save you" case as the glass below. On such toolchains a `GeometryReader`
+    /// in the background reads the same frame and reports it. The report is
+    /// handed to the next run loop on purpose: the value is read during layout,
+    /// and assigning to the model there is what raises "Modifying state during
+    /// view update" — `onGeometryChange` defers its action the same way.
+    func compatOnGeometryChange<T: Equatable>(
+        for type: T.Type = T.self,
+        _ of: @escaping (GeometryProxy) -> T,
+        action: @escaping (T) -> Void
+    ) -> some View {
+        #if swift(>=6.2)
+        if #available(macOS 15, *) {
+            return AnyView(onGeometryChange(for: T.self, of: of, action: action))
+        } else {
+            return AnyView(background(GeometryChangeReporter(of: of, action: action)))
+        }
+        #else
+        return AnyView(background(GeometryChangeReporter(of: of, action: action)))
+        #endif
+    }
     private func cursorCompat(_ cursor: NSCursor) -> some View {
         onHover { hovering in
             (hovering ? cursor : NSCursor.arrow).set()
         }
+    }
+}
+
+/// The old-SDK stand-in for `onGeometryChange`: watch a frame, report changes.
+private struct GeometryChangeReporter<T: Equatable>: View {
+    let of: (GeometryProxy) -> T
+    let action: (T) -> Void
+
+    var body: some View {
+        GeometryReader { geometry in
+            let value = of(geometry)
+            Color.clear
+                .onAppear { report(value) }
+                .onChange(of: value) { newValue in report(newValue) }
+        }
+    }
+
+    private func report(_ value: T) {
+        DispatchQueue.main.async { action(value) }
     }
 }
