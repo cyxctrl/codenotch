@@ -16,6 +16,13 @@ import SwiftUI
 /// every toolchain, including Xcode 26. Newer toolchains then compile the real
 /// modifier, still gated at runtime by `#available`; older ones never see the
 /// symbol at all.
+///
+/// Every `#if compiler(>=6.2)` body below spells out `return`, even where the
+/// older branch is a single expression that would not need it. Under the new
+/// compiler the body becomes an `if #available … else …` statement, and an
+/// opaque return type with no `return` in it is a compile error — one only the
+/// new toolchain can report, so a machine limited to the old SDK cannot see it
+/// until CI does.
 extension View {
     /// Liquid Glass on the view itself, in `style`'s own variant, or a material
     /// in the same shape on older macOS.
@@ -46,12 +53,12 @@ extension View {
         if #available(macOS 26, *) {
             let surface = slab ? style.slabGlass : style.glass
             let glass: Glass = interactive ? surface.interactive() : surface
-            AnyView(glassEffect(glass, in: shape))
+            return AnyView(glassEffect(glass, in: shape))
         } else {
-            AnyView(background(.regularMaterial, in: shape))
+            return AnyView(background(.regularMaterial, in: shape))
         }
         #else
-        AnyView(background(.regularMaterial, in: shape))
+        return AnyView(background(.regularMaterial, in: shape))
         #endif
     }
 
@@ -65,12 +72,12 @@ extension View {
                                         in shape: S) -> some View {
         #if compiler(>=6.2)
         if #available(macOS 26, *) {
-            AnyView(background { Color.clear.glassEffect(style.glass, in: shape) })
+            return AnyView(background { Color.clear.glassEffect(style.glass, in: shape) })
         } else {
-            AnyView(background(.regularMaterial, in: shape))
+            return AnyView(background(.regularMaterial, in: shape))
         }
         #else
-        AnyView(background(.regularMaterial, in: shape))
+        return AnyView(background(.regularMaterial, in: shape))
         #endif
     }
 
@@ -78,12 +85,12 @@ extension View {
     func compatPointerStyle(active: Bool) -> some View {
         #if compiler(>=6.2)
         if #available(macOS 26, *) {
-            AnyView(pointerStyle(active ? .grabIdle : nil))
+            return AnyView(pointerStyle(active ? .grabIdle : nil))
         } else {
-            AnyView(cursorCompat(active ? NSCursor.pointingHand : NSCursor.arrow))
+            return AnyView(cursorCompat(active ? NSCursor.pointingHand : NSCursor.arrow))
         }
         #else
-        AnyView(cursorCompat(active ? NSCursor.pointingHand : NSCursor.arrow))
+        return AnyView(cursorCompat(active ? NSCursor.pointingHand : NSCursor.arrow))
         #endif
     }
 
