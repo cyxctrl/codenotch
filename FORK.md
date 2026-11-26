@@ -234,15 +234,32 @@ make test                 # 期望 0 failures
 Scripts/install-app.sh    # 装到 /Applications，并确认进程起来
 ```
 
-- 旧 fork 在 1.26.0 上的记录是 2884 个测试、2859 通过、25 跳过、0 失败。
-  测试总数会随 upstream 增长，**要盯的是 0 failures**；跳过数受
-  `FullScreenAutoFoldTests.skipIfPointerOnNotch`（指针停在 notch 区域时跳过 8 个）影响。
+- 本轮重建（2026-11-26）实测：**2866 个测试 / 25 跳过 / 0 失败**（完整 `make test`，
+  跑了两次；见下）。旧 fork 在 1.26.0 上是 2884 个测试、0 失败，少的 18 个是跟着
+  Kimi 续期一起被排除的测试。测试总数会随 upstream 增长，**要盯的是 0 failures**；
+  跳过数受 `FullScreenAutoFoldTests.skipIfPointerOnNotch`（指针停在 notch 区域时跳过 8 个）影响。
+- **有一个偶发测试**，第一次跑红、重跑绿：
+  `PanelFollowsTheNotchAfterAnEdgeChangeTests.testThePanelMatchesTheModelAfterMovingRoundTheEdges`。
+  它把 `apply(edge:)` 走一圈后 `settle(0.6)` 秒等动画完成，再比对面板宽度与
+  `model.panelSize.width`；机器忙时 completion 会晚于这 0.6 秒，于是读到的还是折叠态宽度。
+  代码是 upstream 原样、本轮没改过它，报错数字若等于折叠态宽度就是这个原因。
+  下次遇到先重跑一次再判断，不要当成布局回归。
 - 跳过构成的常见来源：opt-in live check、macOS 26 以下的玻璃/dock 渲染与对比度断言。
 - 本机沙箱里 `make test` 会停在 `-10822`（测试宿主需要 LaunchServices），要到普通终端跑。
   编译与 `build-for-testing` 在沙箱内可以跑绿。
 
-云端（GitHub `macos-26` / Xcode 26）：CI 跑 `make test-ci`，Package 跑
-`make package-adhoc` 并核对双架构。**这两处才是 `compiler(>=6.2)` 分支的实测**。
+云端（GitHub `macos-26` / Xcode 26）：Package 跑 `make package-adhoc`，
+`compiler(>=6.2)` 的原生分支只有在那里才会真正被编译。2026-11-26 第一次跑就抓到一处
+只有新编译器能报的错（shim 的 `if #available … else …` 缺少显式 `return`），修完后编译通过。
+
+该次 artifact 已人工验收：`shasum -c` 通过；主程序与 Sparkle 都是 `x86_64 arm64`；
+`codesign --verify --deep --strict` 通过、`Signature=adhoc` + `flags=0x10002(adhoc,runtime)`；
+entitlements 不含 `get-task-allow`；回读 plist 为 1.26.0 / 14.3 / 空 feed / 自动检查 false；
+清掉 `com.apple.quarantine` 后进程能起来并存活（不清则被 Gatekeeper 直接杀掉，这就是
+文档里要求 `xattr -dr` 的原因）。
+
+**`make test-ci`（macOS 26 上跑单元测试）本轮没有跑**：只做了编译。原生分支的运行时行为
+与测试执行仍缺证据，哪天在本仓库建一个 base 为 `main` 的 PR 就会补上。
 
 手工冒烟：XyToken 登录、日/周窗口与重置时间、usage pace、MFA 流程、会话失效后的
 重新登录。没有真实凭据时如实标注未实测，不要用单元测试冒充。
